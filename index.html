@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lamborghini - Day Mode</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #87CEEB; }
+        canvas { display: block; }
+        #loading {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: #333; font-family: sans-serif; font-size: 20px;
+            font-weight: bold;
+            pointer-events: none;
+        }
+        #info {
+            position: absolute; bottom: 20px; left: 20px;
+            color: #333; font-family: sans-serif; font-size: 14px;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 10px 15px;
+            border-radius: 4px;
+            pointer-events: none;
+            line-height: 1.5;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .key {
+            display: inline-block;
+            background: #fff;
+            padding: 2px 6px;
+            border-radius: 3px;
+            border: 1px solid #ccc;
+            font-weight: bold;
+            color: #333;
+        }
+    </style>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+    <div id="loading">Загрузка модели...</div>
+    <div id="info">
+        <div><span class="key">W</span> Газ &nbsp; <span class="key">S</span> Тормоз</div>
+        <div style="margin-top:5px;"><span class="key">A</span> Влево &nbsp; <span class="key">D</span> Вправо</div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+        const CAR_CONFIG = {
+            maxSpeed: 1.2,
+            acceleration: 0.03,
+            friction: 0.96,
+            brakeForce: 0.05,
+            turnSpeed: 0.04
+        };
+
+        const CAMERA_CONFIG = {
+            distance: 4,
+            height: 2,
+            smoothness: 0.1
+        };
+
+        const keys = { w: false, a: false, s: false, d: false };
+        let speed = 0;
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB);
+        scene.fog = new THREE.Fog(0x87CEEB, 20, 150);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.0;
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        const carContainer = new THREE.Group();
+        scene.add(carContainer);
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        const sunLight = new THREE.DirectionalLight(0xffffee, 2.5);
+        sunLight.position.set(50, 100, 50);
+        sunLight.castShadow = true;
+        sunLight.shadow.mapSize.width = 4096;
+        sunLight.shadow.mapSize.height = 4096;
+        sunLight.shadow.camera.near = 0.5;
+        sunLight.shadow.camera.far = 500;
+
+        const d = 100;
+        sunLight.shadow.camera.left = -d;
+        sunLight.shadow.camera.right = d;
+        sunLight.shadow.camera.top = d;
+        sunLight.shadow.camera.bottom = -d;
+
+        scene.add(sunLight);
+
+        const hemiLight = new THREE.HemisphereLight(0x87CEEB, 0x333333, 0.6);
+        scene.add(hemiLight);
+
+        function loadModel() {
+            const loader = new GLTFLoader();
+            loader.load('./scene.gltf', (gltf) => {
+                const model = gltf.scene;
+
+                model.scale.set(50, 50, 50);
+
+                const box = new THREE.Box3().setFromObject(model);
+                const center = box.getCenter(new THREE.Vector3());
+
+                model.position.x -= center.x;
+                model.position.z -= center.z;
+                model.position.y -= box.min.y;
+
+                model.traverse((child) => {
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                    }
+                });
+
+                carContainer.add(model);
+                document.getElementById('loading').style.display = 'none';
+
+            }, undefined, (error) => {
+                console.error(error);
+                document.getElementById('loading').innerText = 'Ошибка загрузки';
+            });
+        }
+        loadModel();
+
+        const plane = new THREE.Mesh(
+            new THREE.PlaneGeometry(1000, 1000),
+            new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.9 })
+        );
+        plane.rotation.x = -Math.PI / 2;
+        plane.receiveShadow = true;
+        scene.add(plane);
+
+        const grid = new THREE.GridHelper(1000, 200, 0x555555, 0x444444);
+        scene.add(grid);
+
+        window.addEventListener('keydown', (e) => {
+            const key = e.key.toLowerCase();
+            if (key === 'w' || key === 'ц') keys.w = true;
+            if (key === 's' || key === 'ы') keys.s = true;
+            if (key === 'a' || key === 'ф') keys.a = true;
+            if (key === 'd' || key === 'в') keys.d = true;
+        });
+
+        window.addEventListener('keyup', (e) => {
+            const key = e.key.toLowerCase();
+            if (key === 'w' || key === 'ц') keys.w = false;
+            if (key === 's' || key === 'ы') keys.s = false;
+            if (key === 'a' || key === 'ф') keys.a = false;
+            if (key === 'd' || key === 'в') keys.d = false;
+        });
+
+        function updateCarPhysics() {
+            if (keys.w) speed += CAR_CONFIG.acceleration;
+            else if (keys.s) speed -= CAR_CONFIG.brakeForce;
+            else speed *= CAR_CONFIG.friction;
+
+            speed = Math.max(Math.min(speed, CAR_CONFIG.maxSpeed), -CAR_CONFIG.maxSpeed / 2);
+
+            if (Math.abs(speed) > 0.01) {
+                const dir = speed > 0 ? 1 : -1;
+                if (keys.a) carContainer.rotation.y += CAR_CONFIG.turnSpeed * dir;
+                if (keys.d) carContainer.rotation.y -= CAR_CONFIG.turnSpeed * dir;
+            }
+
+            carContainer.translateZ(speed);
+        }
+
+        function updateCamera() {
+            const relativeOffset = new THREE.Vector3(0, CAMERA_CONFIG.height, -CAMERA_CONFIG.distance);
+            const cameraOffset = relativeOffset.applyMatrix4(carContainer.matrixWorld);
+            camera.position.lerp(cameraOffset, CAMERA_CONFIG.smoothness);
+
+            const lookAtPos = new THREE.Vector3(0, 1, 0);
+            lookAtPos.applyMatrix4(carContainer.matrixWorld);
+            camera.lookAt(lookAtPos);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            updateCarPhysics();
+            updateCamera();
+
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
