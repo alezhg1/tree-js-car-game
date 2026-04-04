@@ -1,0 +1,65 @@
+# --- IDE и Редакторы кода ---
+# JetBrains IDEs (WebStorm, PhpStorm, PyCharm и др.)
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Другие редакторы
+*.sublime-project
+*.sublime-workspace
+.DS_Store
+Thumbs.db
+
+# --- Зависимости и Сборка ---
+# Node.js (если будете устанавливать библиотеки)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# Python (так как у вас Django в других проектах)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.env
+*.egg-info/
+dist/
+build/
+
+# --- Временные файлы и Логи ---
+*.log
+logs/
+tmp/
+temp/
+*.swp
+*.swo
+*~
+
+# --- ОС ---
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# --- Специфичное для WebGL/Three.js проектов ---
+# Если вы генерируете билды или большие временные ассеты
+dist/
+build/
+*.bak
