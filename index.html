@@ -3,10 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lamborghini - Teleport to Tent</title>
+    <title>Lamborghini - Final Build</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #87CEEB; }
+        body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         canvas { display: block; width: 100vw; height: 100vh; }
+
         #loading {
             position: absolute; top: 50%; left: 50%;
             transform: translate(-50%, -50%);
@@ -14,28 +15,111 @@
             font-weight: bold; pointer-events: none;
             background: rgba(255,255,255,0.9); padding: 20px; border-radius: 8px; z-index: 10;
         }
-        #info {
-            position: absolute; bottom: 20px; left: 20px;
-            color: #333; font-family: sans-serif; font-size: 14px;
-            background: rgba(255, 255, 255, 0.9);
-            padding: 10px 15px; border-radius: 4px;
-            pointer-events: none; line-height: 1.5;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2); z-index: 10;
-            user-select: none;
-        }
+
         #coords {
             position: absolute; top: 20px; right: 20px;
-            color: #000; font-family: 'Courier New', monospace; font-size: 16px;
-            background: rgba(255, 255, 255, 0.9);
-            padding: 10px 15px; border-radius: 4px;
+            color: #000; font-family: 'Courier New', monospace; font-size: 14px;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 8px 12px; border-radius: 4px;
             pointer-events: none;
             box-shadow: 0 2px 5px rgba(0,0,0,0.2); z-index: 10;
             font-weight: bold;
         }
-        .key {
-            display: inline-block; background: #fff;
-            padding: 2px 6px; border-radius: 3px;
-            border: 1px solid #ccc; font-weight: bold; color: #333;
+
+        #speedometer-container {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            width: 220px;
+            height: 220px;
+            background: rgba(0, 0, 0, 0.6);
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(5px);
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5), inset 0 0 20px rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+            overflow: hidden;
+        }
+
+        .gauge-bg {
+            position: absolute;
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            border: 15px solid rgba(255, 255, 255, 0.1);
+            border-top-color: transparent;
+            border-right-color: transparent;
+            transform: rotate(135deg);
+        }
+
+        .gauge-fill {
+            position: absolute;
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            border: 15px solid transparent;
+            border-top-color: #ff3333;
+            border-right-color: #ff3333;
+            transform: rotate(135deg);
+            transition: transform 0.1s ease-out;
+            filter: drop-shadow(0 0 5px #ff3333);
+            z-index: 1;
+        }
+
+        .speed-value {
+            font-size: 48px;
+            font-weight: 800;
+            color: #fff;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+            z-index: 2;
+            line-height: 1;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .speed-unit {
+            font-size: 14px;
+            color: #aaa;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-top: 5px;
+            z-index: 2;
+        }
+
+        .gear-indicator {
+            position: absolute;
+            top: 25%;
+            font-size: 24px;
+            font-weight: bold;
+            color: #ff3333;
+            text-shadow: 0 0 8px #ff3333;
+            z-index: 2;
+        }
+
+        .ticks {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: conic-gradient(from 135deg,
+                transparent 0deg,
+                rgba(255,255,255,0.5) 2deg,
+                transparent 3deg,
+                transparent 45deg,
+                rgba(255,255,255,0.3) 47deg,
+                transparent 48deg,
+                transparent 90deg,
+                rgba(255,255,255,0.2) 92deg,
+                transparent 93deg,
+                transparent 135deg,
+                transparent 225deg,
+                transparent 315deg
+            );
+            border-radius: 50%;
+            z-index: 0;
+            opacity: 0.5;
         }
     </style>
     <link rel="icon" href="data:;base64,=">
@@ -50,18 +134,25 @@
     </script>
 </head>
 <body>
-    <div id="loading">Телепортация к палатке...</div>
+    <div id="loading">Загрузка...</div>
 
     <div id="coords">X: 0.00 | Y: 0.00 | Z: 0.00</div>
 
+    <div id="speedometer-container">
+        <div class="ticks"></div>
+        <div class="gauge-bg"></div>
+        <div class="gauge-fill" id="gauge-fill"></div>
+        <div class="gear-indicator" id="gear-display">N</div>
+        <div class="speed-value" id="speed-value">0</div>
+        <div class="speed-unit">км/ч</div>
+    </div>
 
     <script type="module">
         import * as THREE from 'three';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-        // --- НАСТРОЙКА ТЕЛЕПОРТА ---
-        const TELEPORT_TO_TENT = true; // Поставьте false, чтобы убрать телепорт
-        const TARGET_POS = { x: 25.63, y: 0.22, z: 37.62 }; // Ваши координаты
+        const TELEPORT_TO_TENT = true;
+        const TARGET_POS = { x: 25.63, y: 0.22, z: 37.62 };
 
         const CAR_CONFIG = {
             maxSpeed: 0.4,
@@ -93,6 +184,9 @@
         const _v3LookAt = new THREE.Vector3(0, 1, 0);
         const _v3LightPos = new THREE.Vector3();
 
+        const speedValueEl = document.getElementById('speed-value');
+        const gaugeFillEl = document.getElementById('gauge-fill');
+        const gearDisplayEl = document.getElementById('gear-display');
         const coordsElement = document.getElementById('coords');
 
         const scene = new THREE.Scene();
@@ -146,12 +240,10 @@
                 document.getElementById('loading').style.display = 'none';
                 isTrackLoaded = true;
 
-                // ЕСЛИ ВКЛЮЧЕН ТЕЛЕПОРТ
                 if (TELEPORT_TO_TENT) {
                     carContainer.position.set(TARGET_POS.x, TARGET_POS.y, TARGET_POS.z);
-                    // Сбрасываем скорость, чтобы машина стояла
+                    carContainer.rotation.y = Math.PI;
                     speed = 0;
-                    console.log(`Машина телепортирована на: ${TARGET_POS.x}, ${TARGET_POS.y}, ${TARGET_POS.z}`);
                 } else {
                     alignCarToTrack();
                 }
@@ -174,7 +266,7 @@
 
                 scene.add(trackModel);
                 checkLoading();
-            }, undefined, (err) => console.error('Ошибка трека:', err));
+            }, undefined, (err) => console.error(err));
         }
 
         function loadCar() {
@@ -201,7 +293,7 @@
 
                 carContainer.add(model);
                 checkLoading();
-            }, undefined, (err) => console.error('Ошибка машины:', err));
+            }, undefined, (err) => console.error(err));
         }
 
         loadTrack();
@@ -216,9 +308,23 @@
             raycaster.set(carPosition, downVector);
             const intersects = raycaster.intersectObject(trackModel, true);
 
+            let calculatedY = carContainer.position.y;
+
             if (intersects.length > 0) {
-                carContainer.position.y = intersects[0].point.y + carCenterHeight + 0.05;
+                calculatedY = intersects[0].point.y + carCenterHeight + 0.05;
             }
+
+            const x = carContainer.position.x;
+            const z = carContainer.position.z;
+            if (x > 5 && x < 30 && z > 25 && z < 50) {
+                const MAX_HEIGHT_IN_TENT = 1.5;
+                const GROUND_LEVEL_IN_TENT = 0.5;
+                if (calculatedY > MAX_HEIGHT_IN_TENT) {
+                    calculatedY = GROUND_LEVEL_IN_TENT;
+                }
+            }
+
+            carContainer.position.y = calculatedY;
         }
 
         window.addEventListener('keydown', (e) => {
@@ -275,17 +381,49 @@
             camera.lookAt(_v3LookAt);
         }
 
-        function animate() {
-            requestAnimationFrame(animate);
+        function updateSpeedometer() {
+            const maxGameSpeed = CAR_CONFIG.maxSpeed;
+            const kmh = Math.abs((speed / maxGameSpeed) * 320);
 
-            // Если мы не телепортированы (или уже уехали), продолжаем выравнивать высоту
-            if (!TELEPORT_TO_TENT || speed !== 0 || keys.w || keys.s || keys.a || keys.d) {
-                 // Можно раскомментировать, если нужно, чтобы после телепорта машина тоже прилипала к земле при движении
-                 // alignCarToTrack();
+            speedValueEl.innerText = Math.floor(kmh);
+
+            if (speed === 0) {
+                gearDisplayEl.innerText = 'N';
+                gearDisplayEl.style.color = '#aaa';
+            } else if (speed > 0) {
+                if (kmh < 80) gearDisplayEl.innerText = '1';
+                else if (kmh < 160) gearDisplayEl.innerText = '2';
+                else if (kmh < 240) gearDisplayEl.innerText = '3';
+                else gearDisplayEl.innerText = '4';
+                gearDisplayEl.style.color = '#ff3333';
+            } else {
+                gearDisplayEl.innerText = 'R';
+                gearDisplayEl.style.color = '#ffaa00';
             }
 
+            const normalizedSpeed = Math.min(kmh / 320, 1);
+            const rotation = 135 + (normalizedSpeed * 270);
+            gaugeFillEl.style.transform = `rotate(${rotation}deg)`;
+
+            if (normalizedSpeed > 0.8) {
+                gaugeFillEl.style.borderTopColor = '#ff0000';
+                gaugeFillEl.style.borderRightColor = '#ff0000';
+                gaugeFillEl.style.filter = 'drop-shadow(0 0 10px #ff0000)';
+                speedValueEl.style.color = '#ff0000';
+            } else {
+                gaugeFillEl.style.borderTopColor = '#ff3333';
+                gaugeFillEl.style.borderRightColor = '#ff3333';
+                gaugeFillEl.style.filter = 'drop-shadow(0 0 5px #ff3333)';
+                speedValueEl.style.color = '#fff';
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
             updateCarPhysics();
+            alignCarToTrack();
             updateCameraAndLight();
+            updateSpeedometer();
 
             const x = carContainer.position.x.toFixed(2);
             const y = carContainer.position.y.toFixed(2);
