@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lamborghini - Debug Coordinates</title>
+    <title>Lamborghini - Teleport to Tent</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #87CEEB; }
         canvas { display: block; width: 100vw; height: 100vh; }
@@ -23,7 +23,6 @@
             box-shadow: 0 2px 5px rgba(0,0,0,0.2); z-index: 10;
             user-select: none;
         }
-        /* Стили для новых координат */
         #coords {
             position: absolute; top: 20px; right: 20px;
             color: #000; font-family: 'Courier New', monospace; font-size: 16px;
@@ -51,24 +50,28 @@
     </script>
 </head>
 <body>
-    <div id="loading">Загрузка...</div>
+    <div id="loading">Телепортация к палатке...</div>
 
-    <!-- Панель координат -->
-    <div id="coords">
-        X: 0.00 | Y: 0.00 | Z: 0.00
-    </div>
+    <div id="coords">X: 0.00 | Y: 0.00 | Z: 0.00</div>
 
     <div id="info">
         <div><span class="key">W</span> Газ &nbsp; <span class="key">S</span> Тормоз</div>
         <div style="margin-top:5px;"><span class="key">A</span> Влево &nbsp; <span class="key">D</span> Вправо</div>
-        <div style="margin-top:5px; font-size: 12px; color: #666;">
-            Заедьте под палатку и запишите значение <b>Y</b>
+        <div style="margin-top:5px; font-size: 12px; color: #d9534f; font-weight: bold;">
+            МАШИНА ТЕЛЕПОРТИРОВАНА НА КООРДИНАТЫ ПАЛАТКИ
+        </div>
+        <div style="font-size: 11px; color: #666;">
+            Чтобы отключить, найдите в коде строку: const TELEPORT_TO_TENT = true;
         </div>
     </div>
 
     <script type="module">
         import * as THREE from 'three';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+        // --- НАСТРОЙКА ТЕЛЕПОРТА ---
+        const TELEPORT_TO_TENT = true; // Поставьте false, чтобы убрать телепорт
+        const TARGET_POS = { x: 25.63, y: 0.22, z: 37.62 }; // Ваши координаты
 
         const CAR_CONFIG = {
             maxSpeed: 0.4,
@@ -100,7 +103,6 @@
         const _v3LookAt = new THREE.Vector3(0, 1, 0);
         const _v3LightPos = new THREE.Vector3();
 
-        // Элемент для вывода координат
         const coordsElement = document.getElementById('coords');
 
         const scene = new THREE.Scene();
@@ -153,7 +155,16 @@
             if (assetsLoaded === totalAssets) {
                 document.getElementById('loading').style.display = 'none';
                 isTrackLoaded = true;
-                alignCarToTrack();
+
+                // ЕСЛИ ВКЛЮЧЕН ТЕЛЕПОРТ
+                if (TELEPORT_TO_TENT) {
+                    carContainer.position.set(TARGET_POS.x, TARGET_POS.y, TARGET_POS.z);
+                    // Сбрасываем скорость, чтобы машина стояла
+                    speed = 0;
+                    console.log(`Машина телепортирована на: ${TARGET_POS.x}, ${TARGET_POS.y}, ${TARGET_POS.z}`);
+                } else {
+                    alignCarToTrack();
+                }
             }
         }
 
@@ -276,12 +287,16 @@
 
         function animate() {
             requestAnimationFrame(animate);
+
+            // Если мы не телепортированы (или уже уехали), продолжаем выравнивать высоту
+            if (!TELEPORT_TO_TENT || speed !== 0 || keys.w || keys.s || keys.a || keys.d) {
+                 // Можно раскомментировать, если нужно, чтобы после телепорта машина тоже прилипала к земле при движении
+                 // alignCarToTrack();
+            }
+
             updateCarPhysics();
-            alignCarToTrack();
             updateCameraAndLight();
 
-            // Обновление координат на экране
-            // Округляем до 2 знаков после запятой для читаемости
             const x = carContainer.position.x.toFixed(2);
             const y = carContainer.position.y.toFixed(2);
             const z = carContainer.position.z.toFixed(2);
