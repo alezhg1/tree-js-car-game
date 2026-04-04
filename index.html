@@ -3,37 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lamborghini - Day Mode</title>
+    <title>Lamborghini - Perfect Height</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #87CEEB; }
-        canvas { display: block; }
+        canvas { display: block; width: 100vw; height: 100vh; }
         #loading {
             position: absolute; top: 50%; left: 50%;
             transform: translate(-50%, -50%);
             color: #333; font-family: sans-serif; font-size: 20px;
-            font-weight: bold;
-            pointer-events: none;
+            font-weight: bold; pointer-events: none;
+            background: rgba(255,255,255,0.9); padding: 20px; border-radius: 8px; z-index: 10;
         }
         #info {
             position: absolute; bottom: 20px; left: 20px;
             color: #333; font-family: sans-serif; font-size: 14px;
-            background: rgba(255, 255, 255, 0.8);
-            padding: 10px 15px;
-            border-radius: 4px;
-            pointer-events: none;
-            line-height: 1.5;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px 15px; border-radius: 4px;
+            pointer-events: none; line-height: 1.5;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2); z-index: 10;
+            user-select: none;
         }
         .key {
-            display: inline-block;
-            background: #fff;
-            padding: 2px 6px;
-            border-radius: 3px;
-            border: 1px solid #ccc;
-            font-weight: bold;
-            color: #333;
+            display: inline-block; background: #fff;
+            padding: 2px 6px; border-radius: 3px;
+            border: 1px solid #ccc; font-weight: bold; color: #333;
         }
     </style>
+    <link rel="icon" href="data:;base64,=">
+
     <script type="importmap">
         {
             "imports": {
@@ -44,7 +41,7 @@
     </script>
 </head>
 <body>
-    <div id="loading">Загрузка модели...</div>
+    <div id="loading">Загрузка...</div>
     <div id="info">
         <div><span class="key">W</span> Газ &nbsp; <span class="key">S</span> Тормоз</div>
         <div style="margin-top:5px;"><span class="key">A</span> Влево &nbsp; <span class="key">D</span> Вправо</div>
@@ -55,31 +52,49 @@
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
         const CAR_CONFIG = {
-            maxSpeed: 1.2,
-            acceleration: 0.03,
+            maxSpeed: 0.4,
+            reverseSpeed: 0.3,
+            acceleration: 0.01,
             friction: 0.96,
-            brakeForce: 0.05,
-            turnSpeed: 0.04
+            brakeForce: 0.015,
+            turnSpeed: 0.06
         };
 
         const CAMERA_CONFIG = {
-            distance: 4,
-            height: 2,
-            smoothness: 0.1
+            distance: 0.8,
+            height: 0.35,
+            smoothness: 2
         };
 
         const keys = { w: false, a: false, s: false, d: false };
         let speed = 0;
+        let assetsLoaded = 0;
+        const totalAssets = 2;
+
+        const raycaster = new THREE.Raycaster();
+        const downVector = new THREE.Vector3(0, -1, 0);
+        const carPosition = new THREE.Vector3();
+        let isTrackLoaded = false;
+
+        // Переменная для хранения высоты центра машины от её дна
+        let carCenterHeight = 0;
+
+        const _v3CameraOffset = new THREE.Vector3();
+        const _v3LookAt = new THREE.Vector3(0, 1, 0);
+        const _v3LightPos = new THREE.Vector3();
 
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x87CEEB);
-        scene.fog = new THREE.Fog(0x87CEEB, 20, 150);
+        scene.fog = new THREE.Fog(0x87CEEB, 100, 600);
 
-        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        const renderer = new THREE.WebGLRenderer({
+            antialias: false,
+            powerPreference: "high-performance"
+        });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
         renderer.toneMappingExposure = 1.0;
         renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -89,42 +104,74 @@
 
         const carContainer = new THREE.Group();
         scene.add(carContainer);
+        let trackModel = null;
 
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
         scene.add(ambientLight);
 
-        const sunLight = new THREE.DirectionalLight(0xffffee, 2.5);
-        sunLight.position.set(50, 100, 50);
+        const sunLight = new THREE.DirectionalLight(0xffffee, 1.8);
         sunLight.castShadow = true;
-        sunLight.shadow.mapSize.width = 4096;
-        sunLight.shadow.mapSize.height = 4096;
-        sunLight.shadow.camera.near = 0.5;
-        sunLight.shadow.camera.far = 500;
 
-        const d = 100;
-        sunLight.shadow.camera.left = -d;
-        sunLight.shadow.camera.right = d;
-        sunLight.shadow.camera.top = d;
-        sunLight.shadow.camera.bottom = -d;
+        sunLight.shadow.mapSize.width = 2048;
+        sunLight.shadow.mapSize.height = 2048;
+        sunLight.shadow.bias = -0.0005;
 
+        const shadowSize = 80;
+        sunLight.shadow.camera.left = -shadowSize;
+        sunLight.shadow.camera.right = shadowSize;
+        sunLight.shadow.camera.top = shadowSize;
+        sunLight.shadow.camera.bottom = -shadowSize;
+        sunLight.shadow.camera.near = 10;
+        sunLight.shadow.camera.far = 200;
         scene.add(sunLight);
 
-        const hemiLight = new THREE.HemisphereLight(0x87CEEB, 0x333333, 0.6);
+        const hemiLight = new THREE.HemisphereLight(0x87CEEB, 0x333333, 0.4);
         scene.add(hemiLight);
 
-        function loadModel() {
+        function checkLoading() {
+            assetsLoaded++;
+            if (assetsLoaded === totalAssets) {
+                document.getElementById('loading').style.display = 'none';
+                isTrackLoaded = true;
+                alignCarToTrack();
+            }
+        }
+
+        function loadTrack() {
+            const loader = new GLTFLoader();
+            loader.load('./track/scene.gltf', (gltf) => {
+                trackModel = gltf.scene;
+                trackModel.scale.set(20, 20, 20);
+                trackModel.updateMatrixWorld(true);
+
+                trackModel.traverse((child) => {
+                    if (child.isMesh) {
+                        child.receiveShadow = true;
+                        child.castShadow = true;
+                    }
+                });
+
+                scene.add(trackModel);
+                checkLoading();
+            }, undefined, (err) => console.error('Ошибка трека:', err));
+        }
+
+        function loadCar() {
             const loader = new GLTFLoader();
             loader.load('./scene.gltf', (gltf) => {
                 const model = gltf.scene;
-
-                model.scale.set(50, 50, 50);
+                model.scale.set(14, 14, 14);
 
                 const box = new THREE.Box3().setFromObject(model);
                 const center = box.getCenter(new THREE.Vector3());
 
+                // Вычисляем высоту машины от дна до центра
+                const height = box.max.y - box.min.y;
+                carCenterHeight = height / 2; // Половина высоты - это расстояние от дна до центра
+
                 model.position.x -= center.x;
                 model.position.z -= center.z;
-                model.position.y -= box.min.y;
+                model.position.y -= box.min.y; // Дно машины теперь на Y=0 внутри контейнера
 
                 model.traverse((child) => {
                     if (child.isMesh) {
@@ -134,74 +181,89 @@
                 });
 
                 carContainer.add(model);
-                document.getElementById('loading').style.display = 'none';
-
-            }, undefined, (error) => {
-                console.error(error);
-                document.getElementById('loading').innerText = 'Ошибка загрузки';
-            });
+                checkLoading();
+            }, undefined, (err) => console.error('Ошибка машины:', err));
         }
-        loadModel();
 
-        const plane = new THREE.Mesh(
-            new THREE.PlaneGeometry(1000, 1000),
-            new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.9 })
-        );
-        plane.rotation.x = -Math.PI / 2;
-        plane.receiveShadow = true;
-        scene.add(plane);
+        loadTrack();
+        loadCar();
 
-        const grid = new THREE.GridHelper(1000, 200, 0x555555, 0x444444);
-        scene.add(grid);
+        function alignCarToTrack() {
+            if (!isTrackLoaded || !trackModel) return;
+
+            carPosition.copy(carContainer.position);
+            carPosition.y += 10; // Начинаем луч высоко
+
+            raycaster.set(carPosition, downVector);
+            const intersects = raycaster.intersectObject(trackModel, true);
+
+            if (intersects.length > 0) {
+                // ИДЕАЛЬНАЯ ПОСАДКА:
+                // Точка касания (асфальт) + Половина высоты машины (чтобы центр контейнера был над землей)
+                // Добавляем крошечный отступ 0.05, чтобы не мерцало
+                carContainer.position.y = intersects[0].point.y + carCenterHeight + 0.05;
+            }
+        }
 
         window.addEventListener('keydown', (e) => {
-            const key = e.key.toLowerCase();
-            if (key === 'w' || key === 'ц') keys.w = true;
-            if (key === 's' || key === 'ы') keys.s = true;
-            if (key === 'a' || key === 'ф') keys.a = true;
-            if (key === 'd' || key === 'в') keys.d = true;
+            const k = e.key.toLowerCase();
+            if(k==='w'||k==='ц') keys.w=true;
+            if(k==='s'||k==='ы') keys.s=true;
+            if(k==='a'||k==='ф') keys.a=true;
+            if(k==='d'||k==='в') keys.d=true;
         });
-
         window.addEventListener('keyup', (e) => {
-            const key = e.key.toLowerCase();
-            if (key === 'w' || key === 'ц') keys.w = false;
-            if (key === 's' || key === 'ы') keys.s = false;
-            if (key === 'a' || key === 'ф') keys.a = false;
-            if (key === 'd' || key === 'в') keys.d = false;
+            const k = e.key.toLowerCase();
+            if(k==='w'||k==='ц') keys.w=false;
+            if(k==='s'||k==='ы') keys.s=false;
+            if(k==='a'||k==='ф') keys.a=false;
+            if(k==='d'||k==='в') keys.d=false;
         });
 
         function updateCarPhysics() {
             if (keys.w) speed += CAR_CONFIG.acceleration;
-            else if (keys.s) speed -= CAR_CONFIG.brakeForce;
-            else speed *= CAR_CONFIG.friction;
+            else if (keys.s) {
+                if (speed > 0.01) { speed -= CAR_CONFIG.brakeForce; if (speed < 0) speed = 0; }
+                else if (speed < -0.01) { speed += CAR_CONFIG.brakeForce; if (speed > 0) speed = 0; }
+                else { speed -= CAR_CONFIG.acceleration * 0.5; }
+            }
+            else {
+                speed *= CAR_CONFIG.friction;
+                if (Math.abs(speed) < 0.001) speed = 0;
+            }
 
-            speed = Math.max(Math.min(speed, CAR_CONFIG.maxSpeed), -CAR_CONFIG.maxSpeed / 2);
+            if (speed > CAR_CONFIG.maxSpeed) speed = CAR_CONFIG.maxSpeed;
+            if (speed < -CAR_CONFIG.reverseSpeed) speed = -CAR_CONFIG.reverseSpeed;
 
-            if (Math.abs(speed) > 0.01) {
+            if (Math.abs(speed) > 0.005) {
                 const dir = speed > 0 ? 1 : -1;
                 if (keys.a) carContainer.rotation.y += CAR_CONFIG.turnSpeed * dir;
                 if (keys.d) carContainer.rotation.y -= CAR_CONFIG.turnSpeed * dir;
             }
-
             carContainer.translateZ(speed);
         }
 
-        function updateCamera() {
-            const relativeOffset = new THREE.Vector3(0, CAMERA_CONFIG.height, -CAMERA_CONFIG.distance);
-            const cameraOffset = relativeOffset.applyMatrix4(carContainer.matrixWorld);
-            camera.position.lerp(cameraOffset, CAMERA_CONFIG.smoothness);
+        function updateCameraAndLight() {
+            _v3LightPos.copy(carContainer.position).add(new THREE.Vector3(40, 100, 40));
+            sunLight.position.copy(_v3LightPos);
+            sunLight.target = carContainer;
+            sunLight.target.updateMatrixWorld();
 
-            const lookAtPos = new THREE.Vector3(0, 1, 0);
-            lookAtPos.applyMatrix4(carContainer.matrixWorld);
-            camera.lookAt(lookAtPos);
+            _v3CameraOffset.set(0, CAMERA_CONFIG.height, -CAMERA_CONFIG.distance);
+            _v3CameraOffset.applyMatrix4(carContainer.matrixWorld);
+
+            camera.position.copy(_v3CameraOffset);
+
+            _v3LookAt.set(0, 0.5, 0);
+            _v3LookAt.applyMatrix4(carContainer.matrixWorld);
+            camera.lookAt(_v3LookAt);
         }
 
         function animate() {
             requestAnimationFrame(animate);
-
             updateCarPhysics();
-            updateCamera();
-
+            alignCarToTrack();
+            updateCameraAndLight();
             renderer.render(scene, camera);
         }
         animate();
