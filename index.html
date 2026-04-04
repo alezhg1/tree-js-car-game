@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lamborghini - Perfect Height</title>
+    <title>Lamborghini - Debug Coordinates</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #87CEEB; }
         canvas { display: block; width: 100vw; height: 100vh; }
@@ -22,6 +22,16 @@
             pointer-events: none; line-height: 1.5;
             box-shadow: 0 2px 5px rgba(0,0,0,0.2); z-index: 10;
             user-select: none;
+        }
+        /* Стили для новых координат */
+        #coords {
+            position: absolute; top: 20px; right: 20px;
+            color: #000; font-family: 'Courier New', monospace; font-size: 16px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px 15px; border-radius: 4px;
+            pointer-events: none;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2); z-index: 10;
+            font-weight: bold;
         }
         .key {
             display: inline-block; background: #fff;
@@ -42,9 +52,18 @@
 </head>
 <body>
     <div id="loading">Загрузка...</div>
+
+    <!-- Панель координат -->
+    <div id="coords">
+        X: 0.00 | Y: 0.00 | Z: 0.00
+    </div>
+
     <div id="info">
         <div><span class="key">W</span> Газ &nbsp; <span class="key">S</span> Тормоз</div>
         <div style="margin-top:5px;"><span class="key">A</span> Влево &nbsp; <span class="key">D</span> Вправо</div>
+        <div style="margin-top:5px; font-size: 12px; color: #666;">
+            Заедьте под палатку и запишите значение <b>Y</b>
+        </div>
     </div>
 
     <script type="module">
@@ -75,13 +94,14 @@
         const downVector = new THREE.Vector3(0, -1, 0);
         const carPosition = new THREE.Vector3();
         let isTrackLoaded = false;
-
-        // Переменная для хранения высоты центра машины от её дна
         let carCenterHeight = 0;
 
         const _v3CameraOffset = new THREE.Vector3();
         const _v3LookAt = new THREE.Vector3(0, 1, 0);
         const _v3LightPos = new THREE.Vector3();
+
+        // Элемент для вывода координат
+        const coordsElement = document.getElementById('coords');
 
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x87CEEB);
@@ -164,14 +184,12 @@
 
                 const box = new THREE.Box3().setFromObject(model);
                 const center = box.getCenter(new THREE.Vector3());
-
-                // Вычисляем высоту машины от дна до центра
                 const height = box.max.y - box.min.y;
-                carCenterHeight = height / 2; // Половина высоты - это расстояние от дна до центра
+                carCenterHeight = height / 2;
 
                 model.position.x -= center.x;
                 model.position.z -= center.z;
-                model.position.y -= box.min.y; // Дно машины теперь на Y=0 внутри контейнера
+                model.position.y -= box.min.y;
 
                 model.traverse((child) => {
                     if (child.isMesh) {
@@ -192,15 +210,12 @@
             if (!isTrackLoaded || !trackModel) return;
 
             carPosition.copy(carContainer.position);
-            carPosition.y += 10; // Начинаем луч высоко
+            carPosition.y += 10;
 
             raycaster.set(carPosition, downVector);
             const intersects = raycaster.intersectObject(trackModel, true);
 
             if (intersects.length > 0) {
-                // ИДЕАЛЬНАЯ ПОСАДКА:
-                // Точка касания (асфальт) + Половина высоты машины (чтобы центр контейнера был над землей)
-                // Добавляем крошечный отступ 0.05, чтобы не мерцало
                 carContainer.position.y = intersects[0].point.y + carCenterHeight + 0.05;
             }
         }
@@ -264,6 +279,14 @@
             updateCarPhysics();
             alignCarToTrack();
             updateCameraAndLight();
+
+            // Обновление координат на экране
+            // Округляем до 2 знаков после запятой для читаемости
+            const x = carContainer.position.x.toFixed(2);
+            const y = carContainer.position.y.toFixed(2);
+            const z = carContainer.position.z.toFixed(2);
+            coordsElement.innerText = `X: ${x} | Y: ${y} | Z: ${z}`;
+
             renderer.render(scene, camera);
         }
         animate();
