@@ -5,7 +5,7 @@ export function loadCar(scene, carContainer, onLoaded) {
     const loader = new GLTFLoader();
     loader.load('./scene.gltf', (gltf) => {
         const model = gltf.scene;
-        model.scale.set(14, 14, 14);
+        model.scale.set(20,20,20);
 
         const box = new THREE.Box3().setFromObject(model);
         const center = box.getCenter(new THREE.Vector3());
