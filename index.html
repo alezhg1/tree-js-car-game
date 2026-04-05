@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lamborghini</title>
+    <title>Lamborghini - Fixed Collisions</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         canvas { display: block; width: 100vw; height: 100vh; }
@@ -160,7 +160,8 @@
             acceleration: 0.0008,
             friction: 0.995,
             brakeForce: 0.002,
-            turnSpeed: 0.017
+            turnSpeed: 0.017,
+            collisionDistance: 0.6 // Уменьшено с 1.2 до 0.6 (короткий бампер)
         };
 
         const CAMERA_CONFIG = {
@@ -180,11 +181,15 @@
         const carPosition = new THREE.Vector3();
         let isTrackLoaded = false;
         let carCenterHeight = 0;
+        let carTotalHeight = 0;
 
         const _v3CameraOffset = new THREE.Vector3();
         const _v3LookAt = new THREE.Vector3(0, 1, 0);
         const _v3LightPos = new THREE.Vector3();
         const _currentLookAt = new THREE.Vector3(0, 0.5, 0);
+
+        const _v3Forward = new THREE.Vector3();
+        const _v3Right = new THREE.Vector3();
 
         const speedValueEl = document.getElementById('speed-value');
         const gaugeFillEl = document.getElementById('gauge-fill');
@@ -282,6 +287,7 @@
                 const center = box.getCenter(new THREE.Vector3());
                 const height = box.max.y - box.min.y;
                 carCenterHeight = height / 2;
+                carTotalHeight = height;
 
                 model.position.x -= center.x;
                 model.position.z -= center.z;
@@ -302,28 +308,72 @@
         loadTrack();
         loadCar();
 
+        function checkCollisions(moveDirection) {
+            if (!isTrackLoaded || !trackModel) return false;
+
+            const origin = carContainer.position.clone();
+            origin.y += carCenterHeight * 0.5;
+
+            // Пускаем луч только в сторону движения
+            const direction = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), carContainer.rotation.y);
+
+            // Если движемся назад, инвертируем луч
+            if (moveDirection < 0) {
+                direction.negate();
+            }
+
+            raycaster.set(origin, direction);
+            const intersects = raycaster.intersectObject(trackModel, true);
+
+            // Проверка: есть ли препятствие ближе чем 0.6 единиц
+            if (intersects.length > 0 && intersects[0].distance < CAR_CONFIG.collisionDistance) {
+                return true;
+            }
+            return false;
+        }
+
         function alignCarToTrack() {
             if (!isTrackLoaded || !trackModel) return;
 
+            const currentY = carContainer.position.y;
+
             carPosition.copy(carContainer.position);
-            carPosition.y += 10;
+            carPosition.y += (carCenterHeight * 0.5);
 
             raycaster.set(carPosition, downVector);
+
+            const maxDistance = 2.5;
             const intersects = raycaster.intersectObject(trackModel, true);
 
-            let calculatedY = carContainer.position.y;
+            let foundGround = false;
+            let groundY = currentY;
 
             if (intersects.length > 0) {
-                calculatedY = intersects[0].point.y + carCenterHeight - 0.05;
+                const hit = intersects[0];
+                if (hit.distance <= maxDistance) {
+                    if (hit.point.y < currentY) {
+                        groundY = hit.point.y + carCenterHeight - 0.05;
+                        foundGround = true;
+                    }
+                }
+            }
+
+            let calculatedY = currentY;
+
+            if (foundGround) {
+                calculatedY = groundY;
+            } else {
+                if (currentY > 0) {
+                     calculatedY = currentY - 0.05;
+                }
             }
 
             const x = carContainer.position.x;
             const z = carContainer.position.z;
             if (x > 5 && x < 30 && z > 25 && z < 50) {
                 const MAX_HEIGHT_IN_TENT = 1.5;
-                const GROUND_LEVEL_IN_TENT = 0.5;
                 if (calculatedY > MAX_HEIGHT_IN_TENT) {
-                    calculatedY = GROUND_LEVEL_IN_TENT;
+                    calculatedY = MAX_HEIGHT_IN_TENT;
                 }
             }
 
@@ -346,25 +396,76 @@
         });
 
         function updateCarPhysics() {
-            if (keys.w) speed += CAR_CONFIG.acceleration;
-            else if (keys.s) {
-                if (speed > 0.002) { speed -= CAR_CONFIG.brakeForce; if (speed < 0) speed = 0; }
-                else if (speed < -0.002) { speed += CAR_CONFIG.brakeForce; if (speed > 0) speed = 0; }
-                else { speed -= CAR_CONFIG.acceleration * 0.5; }
-            }
-            else {
+            let desiredSpeedChange = 0;
+            let movingForward = false;
+            let movingBackward = false;
+
+            // Определяем намерение движения
+            if (keys.w) {
+                desiredSpeedChange = CAR_CONFIG.acceleration;
+                movingForward = true;
+            } else if (keys.s) {
+                if (speed > 0.002) { desiredSpeedChange = -CAR_CONFIG.brakeForce; }
+                else if (speed < -0.002) { desiredSpeedChange = CAR_CONFIG.brakeForce; }
+                else {
+                    desiredSpeedChange = -CAR_CONFIG.acceleration * 0.5;
+                    movingBackward = true;
+                }
+            } else {
                 speed *= CAR_CONFIG.friction;
                 if (Math.abs(speed) < 0.0001) speed = 0;
             }
 
+            // ПРОВЕРКА СТОЛКНОВЕНИЙ ТОЛЬКО ПРИ НАЖАТИИ ГАЗА
+            let collisionDetected = false;
+
+            if (movingForward) {
+                if (checkCollisions(1)) collisionDetected = true;
+            } else if (movingBackward && speed >= 0) {
+                // Проверяем назад только если начинаем движение назад
+                if (checkCollisions(-1)) collisionDetected = true;
+            } else if (speed > 0.001) {
+                 // Если уже едем вперед по инерции
+                 if (checkCollisions(1)) collisionDetected = true;
+            } else if (speed < -0.001) {
+                 // Если уже едем назад по инерции
+                 if (checkCollisions(-1)) collisionDetected = true;
+            }
+
+            if (collisionDetected) {
+                speed = 0; // Останавливаем
+
+                // Небольшой откат назад, чтобы не застрять в текстуре
+                const pushBackDir = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), carContainer.rotation.y);
+                if (movingForward || speed > 0) {
+                    carContainer.translateZ(-0.05);
+                } else {
+                    carContainer.translateZ(0.05);
+                }
+
+                return;
+            }
+
+            // Применяем скорость если нет коллизии
+            if (keys.w) speed += desiredSpeedChange;
+            else if (keys.s) {
+                 // Логика тормоза/заднего хода уже просчитана в desiredSpeedChange, но применим аккуратно
+                 if (speed > 0.002) speed -= CAR_CONFIG.brakeForce;
+                 else if (speed < -0.002) speed += CAR_CONFIG.brakeForce;
+                 else if (keys.s) speed -= CAR_CONFIG.acceleration * 0.5;
+            }
+
+            // Ограничения скорости
             if (speed > CAR_CONFIG.maxSpeed) speed = CAR_CONFIG.maxSpeed;
             if (speed < -CAR_CONFIG.reverseSpeed) speed = -CAR_CONFIG.reverseSpeed;
 
+            // Повороты
             if (Math.abs(speed) > 0.0005) {
                 const dir = speed > 0 ? 1 : -1;
                 if (keys.a) carContainer.rotation.y += CAR_CONFIG.turnSpeed * dir;
                 if (keys.d) carContainer.rotation.y -= CAR_CONFIG.turnSpeed * dir;
             }
+
             carContainer.translateZ(speed);
         }
 
