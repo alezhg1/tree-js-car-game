@@ -1,17 +1,20 @@
 import * as THREE from 'three';
-import { createScene } from './scene.js';
+import { createScene, updateDayNightCycle } from './scene.js';
 import { loadTrack, alignCarToTrack, checkCollisions } from './track.js';
 import { loadCar } from './car.js';
 import { updateUI } from './ui.js';
-import { TELEPORT_TO_TENT, TARGET_POS, CAR_CONFIG, CAMERA_CONFIG } from './config.js';
+import { TELEPORT_TO_TENT, TARGET_POS, CAR_CONFIG, CAMERA_CONFIG, TIME_CONFIG } from './config.js';
 
-// Глобальные переменные
 let speed = 0;
 let trackModel = null;
 let carCenterHeight = 0;
 let isTrackLoaded = false;
 let assetsLoaded = 0;
 const totalAssets = 2;
+let headlights = [];
+
+let elapsedTime = 0;
+const clock = new THREE.Clock();
 
 const keys = { w: false, a: false, s: false, d: false };
 const _v3CameraOffset = new THREE.Vector3();
@@ -19,18 +22,15 @@ const _v3LookAt = new THREE.Vector3(0, 1, 0);
 const _v3LightPos = new THREE.Vector3();
 const _currentLookAt = new THREE.Vector3(0, 0.5, 0);
 
-// Инициализация
-const { scene, camera, renderer, sunLight } = createScene();
+const { scene, camera, renderer, sunLight, ambientLight, hemiLight } = createScene();
 const carContainer = new THREE.Group();
 scene.add(carContainer);
 
-// Загрузка ресурсов
 function checkLoading() {
     assetsLoaded++;
     if (assetsLoaded === totalAssets) {
         document.getElementById('loading').style.display = 'none';
         isTrackLoaded = true;
-
         if (TELEPORT_TO_TENT) {
             carContainer.position.set(TARGET_POS.x, TARGET_POS.y, TARGET_POS.z);
             carContainer.rotation.y = Math.PI;
@@ -42,17 +42,13 @@ function checkLoading() {
     }
 }
 
-loadTrack(scene, (model) => {
-    trackModel = model;
-    checkLoading();
-});
-
+loadTrack(scene, (model) => { trackModel = model; checkLoading(); });
 loadCar(scene, carContainer, (carData) => {
     carCenterHeight = carData.centerHeight;
+    headlights = carData.headlights || [];
     checkLoading();
 });
 
-// Управление
 window.addEventListener('keydown', (e) => {
     const k = e.key.toLowerCase();
     if(k==='w'||k==='ц') keys.w=true;
@@ -68,17 +64,11 @@ window.addEventListener('keyup', (e) => {
     if(k==='d'||k==='в') keys.d=false;
 });
 
-// Физика
 function updateCarPhysics() {
     let movingForward = false;
-    let movingBackward = false;
-
-    if (keys.w) {
-        movingForward = true;
-    } else if (keys.s) {
-        if (speed > 0.002) { }
-        else if (speed < -0.002) { }
-        else { movingBackward = true; }
+    if (keys.w) movingForward = true;
+    else if (keys.s) {
+        if (!(speed > 0.002) && !(speed < -0.002)) movingForward = false;
     } else {
         speed *= CAR_CONFIG.friction;
         if (Math.abs(speed) < 0.0001) speed = 0;
@@ -87,8 +77,8 @@ function updateCarPhysics() {
     let collisionDetected = false;
     if (movingForward) {
         if (checkCollisions(carContainer, trackModel, carCenterHeight, 1)) collisionDetected = true;
-    } else if (movingBackward && speed >= 0) {
-        if (checkCollisions(carContainer, trackModel, carCenterHeight, -1)) collisionDetected = true;
+    } else if (keys.s && speed >= 0) {
+         if (checkCollisions(carContainer, trackModel, carCenterHeight, -1)) collisionDetected = true;
     } else if (speed > 0.001) {
         if (checkCollisions(carContainer, trackModel, carCenterHeight, 1)) collisionDetected = true;
     } else if (speed < -0.001) {
@@ -120,7 +110,6 @@ function updateCarPhysics() {
     carContainer.translateZ(speed);
 }
 
-// Камера и свет
 function updateCameraAndLight() {
     _v3LightPos.copy(carContainer.position).add(new THREE.Vector3(40, 100, 40));
     sunLight.position.copy(_v3LightPos);
@@ -137,18 +126,30 @@ function updateCameraAndLight() {
     camera.lookAt(_currentLookAt);
 }
 
-// Цикл анимации
 function animate() {
     requestAnimationFrame(animate);
+
+    const delta = clock.getDelta();
+    elapsedTime += delta;
+
+    const isNight = updateDayNightCycle(sunLight, ambientLight, hemiLight, scene, elapsedTime);
+
+    // Включение фар
+    const targetIntensity = isNight ? TIME_CONFIG.headlightIntensity : 0;
+    headlights.forEach(light => {
+        // Плавное изменение яркости
+        light.intensity += (targetIntensity - light.intensity) * 0.05;
+    });
+
     updateCarPhysics();
     alignCarToTrack(carContainer, trackModel, carCenterHeight);
     updateCameraAndLight();
     updateUI(carContainer, speed);
+
     renderer.render(scene, camera);
 }
 animate();
 
-// Ресайз
 window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
