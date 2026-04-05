@@ -1,0 +1,116 @@
+body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+canvas { display: block; width: 100vw; height: 100vh; }
+
+#loading {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    color: #333; font-family: sans-serif; font-size: 20px;
+    font-weight: bold; pointer-events: none;
+    background: rgba(255,255,255,0.9); padding: 20px; border-radius: 8px; z-index: 10;
+}
+
+#coords {
+    position: absolute; top: 20px; right: 20px;
+    color: #000; font-family: 'Courier New', monospace; font-size: 14px;
+    background: rgba(255, 255, 255, 0.8);
+    padding: 8px 12px; border-radius: 4px;
+    pointer-events: none;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2); z-index: 10;
+    font-weight: bold;
+}
+
+#speedometer-container {
+    position: absolute;
+    bottom: 30px;
+    right: 30px;
+    width: 220px;
+    height: 220px;
+    background: rgba(0, 0, 0, 0.6);
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(5px);
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5), inset 0 0 20px rgba(0, 0, 0, 0.8);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+    overflow: hidden;
+}
+
+.gauge-bg {
+    position: absolute;
+    width: 180px;
+    height: 180px;
+    border-radius: 50%;
+    border: 15px solid rgba(255, 255, 255, 0.1);
+    border-top-color: transparent;
+    border-right-color: transparent;
+    transform: rotate(135deg);
+}
+
+.gauge-fill {
+    position: absolute;
+    width: 180px;
+    height: 180px;
+    border-radius: 50%;
+    border: 15px solid transparent;
+    border-top-color: #ff3333;
+    border-right-color: #ff3333;
+    transform: rotate(135deg);
+    transition: transform 0.1s ease-out;
+    filter: drop-shadow(0 0 5px #ff3333);
+    z-index: 1;
+}
+
+.speed-value {
+    font-size: 48px;
+    font-weight: 800;
+    color: #fff;
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+    z-index: 2;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+
+.speed-unit {
+    font-size: 14px;
+    color: #aaa;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-top: 5px;
+    z-index: 2;
+}
+
+.gear-indicator {
+    position: absolute;
+    top: 25%;
+    font-size: 24px;
+    font-weight: bold;
+    color: #ff3333;
+    text-shadow: 0 0 8px #ff3333;
+    z-index: 2;
+}
+
+.ticks {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    background: conic-gradient(from 135deg,
+        transparent 0deg,
+        rgba(255,255,255,0.5) 2deg,
+        transparent 3deg,
+        transparent 45deg,
+        rgba(255,255,255,0.3) 47deg,
+        transparent 48deg,
+        transparent 90deg,
+        rgba(255,255,255,0.2) 92deg,
+        transparent 93deg,
+        transparent 135deg,
+        transparent 225deg,
+        transparent 315deg
+    );
+    border-radius: 50%;
+    z-index: 0;
+    opacity: 0.5;
+}
