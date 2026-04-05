@@ -43,7 +43,7 @@ export function alignCarToTrack(carContainer, trackModel, carCenterHeight) {
         const hit = intersects[0];
         if (hit.distance <= maxDistance) {
             if (hit.point.y < currentY) {
-                groundY = hit.point.y + carCenterHeight - 0.11;
+                groundY = hit.point.y + carCenterHeight - 0.1;
                 foundGround = true;
             }
         }
