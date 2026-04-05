@@ -182,7 +182,7 @@ function animate() {
     updateRain(camera);
 
     // Управление фарами (включаются ночью)
-    const targetHeadlightIntensity = isNight ? 14 : 0;
+    const targetHeadlightIntensity = isNight ? 20 : 0;
     headlights.forEach(light => {
         light.intensity += (targetHeadlightIntensity - light.intensity) * 0.1;
     });
