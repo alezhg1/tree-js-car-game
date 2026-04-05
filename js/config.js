@@ -18,12 +18,13 @@ export const CAMERA_CONFIG = {
     lerpLookAt: 0.02
 };
 
-// НАСТРОЙКИ ВРЕМЕНИ СУТОК
+// НАСТРОЙКИ ВРЕМЕНИ СУТОК И НЕБА
 export const TIME_CONFIG = {
-    dayDuration: 180,       // 3 минуты дня
-    nightDuration: 180,     // 3 минуты ночи
-    headlightIntensity: 8,  // ОЧЕНЬ яркие фары
-    headlightDistance: 100, // Дальнобойные фары
+    dayDuration: 40,       // 3 минуты дня
+    nightDuration: 40,     // 3 минуты ночи
+    headlightIntensity: 8,
+    headlightDistance: 100,
     sunHeightDay: 100,
-    sunHeightNight: -50
+    sunHeightNight: -50,
+    starCount: 5000         // Количество звезд
 };
