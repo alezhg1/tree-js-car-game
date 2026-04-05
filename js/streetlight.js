@@ -4,17 +4,22 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 export function loadStreetLight(scene, position, onLoaded) {
     const loader = new GLTFLoader();
 
-    // Загружаем модель из папки street_light
+    // НАСТРОЙКА РАЗМЕРА
+    // Машина у тебя масштаба 20.
+    // Если модель фонаря сделана в реальных размерах (метры), ставь 1.0.
+    // Если она кажется огромной, попробуй 0.5. Если маленькой — 2.0.
+    const LAMP_SCALE = 1.0;
+
     loader.load('./street_light/scene.gltf', (gltf) => {
         const model = gltf.scene;
 
-        // Устанавливаем позицию, которую передали из main.js
+        // Позиция
         model.position.copy(position);
 
-        // Масштаб (можешь поменять, если фонарь слишком большой или маленький)
-        model.scale.set(1, 1, 1);
+        // Масштаб
+        model.scale.set(LAMP_SCALE, LAMP_SCALE, LAMP_SCALE);
 
-        // Настройка теней для модели
+        // Тени
         model.traverse((child) => {
             if (child.isMesh) {
                 child.castShadow = true;
@@ -24,7 +29,6 @@ export function loadStreetLight(scene, position, onLoaded) {
 
         scene.add(model);
 
-        // Сообщаем, что загрузка завершена
         if (onLoaded) onLoaded();
 
     }, undefined, (err) => console.error('Ошибка загрузки фонаря:', err));
