@@ -2,14 +2,12 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { CAR_CONFIG } from './config.js';
 
-// --- ОПТИМИЗАЦИЯ: Переиспользуемые векторы ---
-// Создаем их один раз при загрузке модуля, чтобы не мусорить память каждый кадр
+// --- ГЛОБАЛЬНЫЕ СТАТИЧЕСКИЕ ОБЪЕКТЫ (СОЗДАЮТСЯ 1 РАЗ) ---
+// Это убирает нагрузку на сборщик мусора (Garbage Collector), который вызывает фризы на высокой скорости
 const raycaster = new THREE.Raycaster();
-const downVector = new THREE.Vector3(0, -1, 0);
-const carPosition = new THREE.Vector3();
-const collisionOrigin = new THREE.Vector3();
-const collisionDirection = new THREE.Vector3();
-const rotationAxis = new THREE.Vector3(0, 1, 0);
+const tempVector = new THREE.Vector3();
+const tempDirection = new THREE.Vector3();
+const upAxis = new THREE.Vector3(0, 1, 0);
 
 export function loadTrack(scene, onLoaded) {
     const loader = new GLTFLoader();
@@ -18,12 +16,11 @@ export function loadTrack(scene, onLoaded) {
         trackModel.scale.set(20, 20, 20);
         trackModel.updateMatrixWorld(true);
 
-        // --- ОПТИМИЗАЦИЯ ТЕНЕЙ ---
+        // ОПТИМИЗАЦИЯ ТЕНЕЙ
         trackModel.traverse((child) => {
             if (child.isMesh) {
-                child.receiveShadow = true;  // Тени ПАДАЮТ на объекты (машина будет отбрасывать тень на дорогу)
-                child.castShadow = false;    // Тени ОТ объектов (деревьев/домов) ВЫКЛЮЧЕНЫ. 
-                                             // Это дает огромный прирост FPS при движении камеры/света.
+                child.receiveShadow = true; // Тени падают на дорогу
+                child.castShadow = false;   // ОТКЛЮЧЕНО: Дорога/деревья не отбрасывают тени (главная причина лагов)
             }
         });
 
@@ -35,74 +32,76 @@ export function loadTrack(scene, onLoaded) {
 export function alignCarToTrack(carContainer, trackModel, carCenterHeight) {
     if (!trackModel) return;
 
-    const currentY = carContainer.position.y;
-    
-    // Используем глобальный вектор carPosition
-    carPosition.copy(carContainer.position);
-    carPosition.y += (carCenterHeight * 0.5);
+    // Используем глобальный tempVector
+    tempVector.copy(carContainer.position);
+    tempVector.y += (carCenterHeight * 0.5);
 
-    raycaster.set(carPosition, downVector);
-    const maxDistance = 2.5;
+    raycaster.set(tempVector, new THREE.Vector3(0, -1, 0));
     
-    // intersectObject быстр, если геометрия не слишком сложная
+    // Оптимизация: intersectObjects быстрее, если передать массив, но intersectObject тоже ок для одного объекта
     const intersects = raycaster.intersectObject(trackModel, true);
 
     let foundGround = false;
-    let groundY = currentY;
+    let groundY = carContainer.position.y;
 
     if (intersects.length > 0) {
         const hit = intersects[0];
-        if (hit.distance <= maxDistance) {
-            if (hit.point.y < currentY) {
+        if (hit.distance <= 2.5) {
+            if (hit.point.y < carContainer.position.y) {
                 groundY = hit.point.y + carCenterHeight - 0.05;
                 foundGround = true;
             }
         }
     }
 
-    let calculatedY = currentY;
     if (foundGround) {
-        calculatedY = groundY;
-    } else {
-        if (currentY > 0) calculatedY = currentY - 0.05;
+        carContainer.position.y = groundY;
+    } else if (carContainer.position.y > 0) {
+        carContainer.position.y -= 0.05;
     }
 
-    // Зона палатки (без изменений)
+    // Зона палатки (оставляем как есть)
     const x = carContainer.position.x;
     const z = carContainer.position.z;
     if (x > 5 && x < 30 && z > 25 && z < 50) {
-        const MAX_HEIGHT_IN_TENT = 1.5;
-        if (calculatedY > MAX_HEIGHT_IN_TENT) calculatedY = MAX_HEIGHT_IN_TENT;
+        if (carContainer.position.y > 1.5) carContainer.position.y = 1.5;
     }
-
-    carContainer.position.y = calculatedY;
 }
 
+/**
+ * Оптимизированная проверка коллизий.
+ * Проверяет ТОЛЬКО в направлении движения.
+ * @param {THREE.Group} carContainer 
+ * @param {THREE.Mesh} trackModel 
+ * @param {number} carCenterHeight 
+ * @param {number} moveDirection (1 = вперед, -1 = назад)
+ * @returns {boolean}
+ */
 export function checkCollisions(carContainer, trackModel, carCenterHeight, moveDirection) {
     if (!trackModel) return false;
 
-    // --- ОПТИМИЗАЦИЯ КОЛЛИЗИЙ ---
-    // 1. Используем переиспользуемые векторы вместо создания новых
-    collisionOrigin.copy(carContainer.position);
-    collisionOrigin.y += carCenterHeight * 0.5;
+    // 1. Вычисляем точку старта луча (центр машины)
+    tempVector.copy(carContainer.position);
+    tempVector.y += carCenterHeight * 0.5;
 
-    // 2. Вычисляем направление без лишних аллокаций
-    // Берем направление вперед машины
-    collisionDirection.set(0, 0, 1);
-    collisionDirection.applyAxisAngle(rotationAxis, carContainer.rotation.y);
+    // 2. Вычисляем направление ТОЛЬКО ОДИН РАЗ
+    // Берем локальное направление (0,0,1) и поворачиваем его на угол машины
+    tempDirection.set(0, 0, 1);
+    tempDirection.applyAxisAngle(upAxis, carContainer.rotation.y);
 
-    // Если едем назад, инвертируем направление
+    // Если едем назад, разворачиваем луч
     if (moveDirection < 0) {
-        collisionDirection.negate();
+        tempDirection.negate();
     }
 
-    raycaster.set(collisionOrigin, collisionDirection);
+    // 3. Настраиваем луч
+    raycaster.set(tempVector, tempDirection);
 
-    // 3. Проверка пересечений
+    // 4. Проверка
     const intersects = raycaster.intersectObject(trackModel, true);
 
     if (intersects.length > 0) {
-        // Проверяем только первое пересечение (самое близкое)
+        // Если ближайшее препятствие ближе чем дистанция безопасности
         if (intersects[0].distance < CAR_CONFIG.collisionDistance) {
             return true;
         }
