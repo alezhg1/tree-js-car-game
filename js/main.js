@@ -1,38 +1,23 @@
 import * as THREE from 'three';
 import { createScene, updateDayNightCycle } from './scene.js';
-import { loadTrack, alignCarToTrack } from './track.js';
+import { loadTrack, alignCarToTrack, checkCollisions } from './track.js';
 import { loadCar } from './car.js';
 import { updateUI } from './ui.js';
 import { TELEPORT_TO_TENT, TARGET_POS, CAR_CONFIG, CAMERA_CONFIG, TIME_CONFIG } from './config.js';
 import Stats from 'three/addons/libs/stats.module.js';
 
-// --- ИНИЦИАЛИЗАЦИЯ СЧЕТЧИКА FPS ---
+// --- FPS METER ---
 const stats = new Stats();
 stats.showPanel(0);
 document.body.appendChild(stats.dom);
-stats.dom.style.position = 'absolute';
-stats.dom.style.left = '0px';
-stats.dom.style.top = '0px';
-stats.dom.style.zIndex = '9999';
-stats.dom.style.opacity = '0.8';
+stats.dom.style.cssText = 'position:absolute;left:0px;top:0px;z-index:9999;opacity:0.8;';
 
-// --- ИНИЦИАЛИЗАЦИЯ ЧАСОВ ---
+// --- CLOCK UI ---
 const clockDiv = document.createElement('div');
 clockDiv.id = 'game-clock';
-clockDiv.style.position = 'absolute';
-clockDiv.style.top = '10px';
-clockDiv.style.left = '50%';
-clockDiv.style.transform = 'translateX(-50%)'; // Центрирование
-clockDiv.style.color = '#ffffff';
-clockDiv.style.fontSize = '32px';
-clockDiv.style.fontFamily = '"Courier New", Courier, monospace'; // Моноширинный шрифт
-clockDiv.style.fontWeight = 'bold';
-clockDiv.style.textShadow = '2px 2px 4px #000000'; // Тень для читаемости
-clockDiv.style.zIndex = '9999';
-clockDiv.style.pointerEvents = 'none'; // Чтобы клики проходили сквозь часы
+clockDiv.style.cssText = 'position:absolute;top:10px;left:50%;transform:translateX(-50%);color:#fff;font-size:32px;font-family:"Courier New",monospace;font-weight:bold;text-shadow:2px 2px 4px #000;z-index:9999;pointer-events:none;';
 clockDiv.innerText = '00:00';
 document.body.appendChild(clockDiv);
-// ------------------------------
 
 let speed = 0;
 let trackModel = null;
@@ -87,25 +72,51 @@ window.addEventListener('keyup', (e) => {
 });
 
 function updateCarPhysics() {
-    if (keys.w) speed += CAR_CONFIG.acceleration;
+    // 1. Расчет желаемой скорости
+    let desiredAcceleration = 0;
+    if (keys.w) desiredAcceleration = CAR_CONFIG.acceleration;
     else if (keys.s) {
-        if (speed > 0) speed -= CAR_CONFIG.brakeForce;
-        else if (speed < 0) speed += CAR_CONFIG.brakeForce;
-        else speed -= CAR_CONFIG.acceleration * 0.5;
+        if (speed > 0) desiredAcceleration = -CAR_CONFIG.brakeForce;
+        else if (speed < 0) desiredAcceleration = CAR_CONFIG.brakeForce;
+        else desiredAcceleration = -CAR_CONFIG.acceleration * 0.5;
     } else {
         speed *= CAR_CONFIG.friction;
     }
 
+    if (desiredAcceleration !== 0) {
+        speed += desiredAcceleration;
+    }
+
+    // Ограничения скорости
     if (speed > CAR_CONFIG.maxSpeed) speed = CAR_CONFIG.maxSpeed;
     if (speed < -CAR_CONFIG.reverseSpeed) speed = -CAR_CONFIG.reverseSpeed;
     if (Math.abs(speed) < 0.0001) speed = 0;
 
+    // 2. ПОВОРОТЫ
     if (Math.abs(speed) > 0.0001) {
         const dir = speed >= 0 ? 1 : -1;
         if (keys.a) carContainer.rotation.y += CAR_CONFIG.turnSpeed * dir;
         if (keys.d) carContainer.rotation.y -= CAR_CONFIG.turnSpeed * dir;
     }
 
+    // 3. 🔥 ПРОВЕРКА КОЛЛИЗИЙ (ТОЛЬКО ЕСЛИ ЕСТЬ ДВИЖЕНИЕ)
+    // Это критически важно для производительности!
+    let collision = false;
+    if (Math.abs(speed) > 0.001) {
+        // Определяем направление для логики отталкивания (упрощенно считаем вперед)
+        collision = checkCollisions(carContainer, trackModel, carCenterHeight);
+    }
+
+    if (collision) {
+        // МГНОВЕННАЯ ОСТАНОВКА И ОТТАЛКИВАНИЕ
+        speed = 0;
+        // Чуть отъезжаем назад, чтобы не застрять в текстуре
+        carContainer.translateZ(-0.05);
+        // Прерываем функцию, чтобы не применять движение вперед
+        return;
+    }
+
+    // 4. ПРИМЕНЕНИЕ ДВИЖЕНИЯ
     carContainer.translateZ(speed);
 }
 
@@ -120,30 +131,16 @@ function updateCamera() {
     camera.lookAt(_currentLookAt);
 }
 
-// Функция обновления часов
 function updateClock(elapsedTime) {
     const dayDur = TIME_CONFIG.dayDuration;
     const nightDur = TIME_CONFIG.nightDuration;
     const totalCycle = dayDur + nightDur;
-
-    // Время внутри текущего цикла (в секундах)
     let timeInCycle = elapsedTime % totalCycle;
-
-    // Переводим игровые секунды в "часы" (0-6 часов за полный цикл)
-    // 3 мин день + 3 мин ночь = 6 игровых часов
-    // Коэффициент: 6 часов / totalCycle секунд
     const gameHoursTotal = 6;
     const gameTimeInHours = (timeInCycle / totalCycle) * gameHoursTotal;
-
     const hours = Math.floor(gameTimeInHours);
-    const minutesFraction = gameTimeInHours - hours;
-    const minutes = Math.floor(minutesFraction * 60);
-
-    // Форматирование с ведущим нулем (03:05)
-    const hStr = hours.toString().padStart(2, '0');
-    const mStr = minutes.toString().padStart(2, '0');
-
-    clockDiv.innerText = `${hStr}:${mStr}`;
+    const minutes = Math.floor((gameTimeInHours - hours) * 60);
+    clockDiv.innerText = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
 }
 
 let elapsedTime = 0;
@@ -156,8 +153,6 @@ function animate() {
     elapsedTime += delta;
 
     const isNight = updateDayNightCycle(elapsedTime, sunLight, ambientLight, scene);
-
-    // Обновляем часы каждый кадр
     updateClock(elapsedTime);
 
     const targetHeadlightIntensity = isNight ? 5.0 : 0.0;
