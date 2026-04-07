@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { CAR_CONFIG } from './config.js';
+
+const tempVec = new THREE.Vector3();
+const downVector = new THREE.Vector3(0, -1, 0);
+const raycaster = new THREE.Raycaster();
+
+const GROUND_LEVEL_Y = 0.10;
 
 export function loadTrack(scene, onLoaded) {
     const loader = new GLTFLoader();
@@ -9,10 +14,32 @@ export function loadTrack(scene, onLoaded) {
         trackModel.scale.set(20, 20, 20);
         trackModel.updateMatrixWorld(true);
 
+        // ОПТИМИЗАЦИЯ С СОХРАНЕНИЕМ ТЕКСТУР
         trackModel.traverse((child) => {
             if (child.isMesh) {
-                child.receiveShadow = true;
-                child.castShadow = true;
+                const oldMat = child.material;
+
+                // Создаем новый быстрый материал, но ПЕРЕНОСИМ в него текстуру и цвет
+                const newMat = new THREE.MeshBasicMaterial({
+                    // Если была текстура (трава, кирпичи), переносим её
+                    map: oldMat.map ? oldMat.map : null,
+
+                    // Если текстуры нет, берем цвет
+                    color: oldMat.color ? oldMat.color : 0xffffff,
+
+                    // Важно для прозрачности (если есть окна или листва)
+                    transparent: oldMat.transparent,
+                    opacity: oldMat.opacity,
+                    side: oldMat.side || THREE.FrontSide,
+
+                    fog: true // Чтобы объекты растворялись в тумане
+                });
+
+                child.material = newMat;
+
+                // Отключаем тени для производительности
+                child.castShadow = false;
+                child.receiveShadow = false;
             }
         });
 
@@ -21,65 +48,52 @@ export function loadTrack(scene, onLoaded) {
     }, undefined, (err) => console.error(err));
 }
 
-const raycaster = new THREE.Raycaster();
-const downVector = new THREE.Vector3(0, -1, 0);
-const carPosition = new THREE.Vector3();
-
+/**
+ * Выравнивание машины с защитой от проваливания
+ */
 export function alignCarToTrack(carContainer, trackModel, carCenterHeight) {
     if (!trackModel) return;
 
-    const currentY = carContainer.position.y;
-    carPosition.copy(carContainer.position);
-    carPosition.y += (carCenterHeight * 0.5);
+    const currentPos = carContainer.position;
 
-    raycaster.set(carPosition, downVector);
-    const maxDistance = 2.5;
+    tempVec.copy(currentPos);
+    tempVec.y += (carCenterHeight * 0.5);
+
+    raycaster.set(tempVec, downVector);
     const intersects = raycaster.intersectObject(trackModel, true);
 
-    let foundGround = false;
-    let groundY = currentY;
+    let targetY = currentPos.y;
+    let foundValidGround = false;
 
     if (intersects.length > 0) {
         const hit = intersects[0];
-        if (hit.distance <= maxDistance) {
-            if (hit.point.y < currentY) {
-                groundY = hit.point.y + carCenterHeight - 0.1;
-                foundGround = true;
-            }
+
+        // Проверка: если точка ниже -5, считаем это ошибкой (внутри объекта)
+        if (hit.point.y > -5.0) {
+            targetY = hit.point.y + carCenterHeight - 0.1;
+            foundValidGround = true;
         }
     }
 
-    let calculatedY = currentY;
-    if (foundGround) {
-        calculatedY = groundY;
+    if (!foundValidGround) {
+        // Если мы высоко - падаем
+        if (currentPos.y > GROUND_LEVEL_Y + 2.0) {
+            targetY = currentPos.y - 0.5;
+        }
+        // Если низко или под землей - телепорт на уровень дороги
+        else {
+            targetY = GROUND_LEVEL_Y + carCenterHeight - 0.1;
+        }
+    }
+
+    // Плавное или резкое изменение Y
+    if (Math.abs(targetY - currentPos.y) > 3.0) {
+        carContainer.position.y = targetY;
     } else {
-        if (currentY > 0) calculatedY = currentY - 0.05;
+        carContainer.position.y += (targetY - currentPos.y) * 0.2;
     }
-
-    const x = carContainer.position.x;
-    const z = carContainer.position.z;
-    if (x > 5 && x < 30 && z > 25 && z < 50) {
-        const MAX_HEIGHT_IN_TENT = 1.5;
-        if (calculatedY > MAX_HEIGHT_IN_TENT) calculatedY = MAX_HEIGHT_IN_TENT;
-    }
-
-    carContainer.position.y = calculatedY;
 }
 
-export function checkCollisions(carContainer, trackModel, carCenterHeight, moveDirection) {
-    if (!trackModel) return false;
-
-    const origin = carContainer.position.clone();
-    origin.y += carCenterHeight * 0.5;
-
-    const direction = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), carContainer.rotation.y);
-    if (moveDirection < 0) direction.negate();
-
-    raycaster.set(origin, direction);
-    const intersects = raycaster.intersectObject(trackModel, true);
-
-    if (intersects.length > 0 && intersects[0].distance < CAR_CONFIG.collisionDistance) {
-        return true;
-    }
+export function checkCollisions() {
     return false;
 }

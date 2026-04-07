@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { TIME_CONFIG } from './config.js';
 
 export function loadCar(scene, carContainer, onLoaded) {
     const loader = new GLTFLoader();
@@ -14,7 +13,8 @@ export function loadCar(scene, carContainer, onLoaded) {
 
         const carData = {
             centerHeight: height / 2,
-            totalHeight: height
+            totalHeight: height,
+            headlights: [] // Сюда запишем фары
         };
 
         model.position.x -= center.x;
@@ -23,35 +23,35 @@ export function loadCar(scene, carContainer, onLoaded) {
 
         model.traverse((child) => {
             if (child.isMesh) {
-                child.castShadow = true;
-                child.receiveShadow = true;
+                child.castShadow = false;
+                child.receiveShadow = false;
             }
         });
 
-        // --- ФАРЫ ---
-        const headlightLeft = new THREE.SpotLight(0xffffff, 0);
-        headlightLeft.angle = Math.PI / 4; // Широкий луч (45 градусов)
-        headlightLeft.penumbra = 0.5;      // Мягкие края
-        headlightLeft.decay = 1.5;         // Меньше затухание для дальности
-        headlightLeft.distance = TIME_CONFIG.headlightDistance;
-        headlightLeft.castShadow = true;   // Фары тоже отбрасывают тени!
-        headlightLeft.shadow.mapSize.width = 1024;
-        headlightLeft.shadow.mapSize.height = 1024;
+        // --- СОЗДАНИЕ ФАР ---
+        // Левая фара
+        const leftLight = new THREE.SpotLight(0xffffee, 0); // Яркость 0 изначально
+        leftLight.angle = Math.PI / 6;
+        leftLight.penumbra = 0.5;
+        leftLight.decay = 2;
+        leftLight.distance = 60; // Дальность света
+        leftLight.position.set(-0.3, 0.5, 0.8); // Позиция относительно центра машины
+        leftLight.target.position.set(-0.3, 0, 10); // Цель света
 
-        // Позиция: слева спереди, чуть выше земли
-        headlightLeft.position.set(-0.4, 0.6, 1.0);
-        headlightLeft.target.position.set(-0.4, 0, 20);
+        // Правая фара
+        const rightLight = leftLight.clone();
+        rightLight.position.set(0.3, 0.5, 0.8);
+        rightLight.target.position.set(0.3, 0, 10);
 
-        const headlightRight = headlightLeft.clone();
-        headlightRight.position.set(0.4, 0.6, 1.0); // Справа спереди
-        headlightRight.target.position.set(0.4, 0, 20);
+        // Добавляем фары и их цели в контейнер машины
+        carContainer.add(leftLight);
+        carContainer.add(leftLight.target);
+        carContainer.add(rightLight);
+        carContainer.add(rightLight.target);
 
-        carContainer.add(headlightLeft);
-        carContainer.add(headlightLeft.target);
-        carContainer.add(headlightRight);
-        carContainer.add(headlightRight.target);
-
-        carData.headlights = [headlightLeft, headlightRight];
+        // Сохраняем ссылки для main.js
+        carData.headlights = [leftLight, rightLight];
+        // --------------------------
 
         carContainer.add(model);
         onLoaded(carData);
