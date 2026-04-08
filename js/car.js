@@ -35,7 +35,7 @@ export function loadCar(scene, carContainer, onLoaded) {
             light.angle = Math.PI / 5;   // Чуть уже (~36 градусов), чтобы было пятно, а не веер
             light.penumbra = 0.8;        // Очень мягкие края для реализма
             light.decay = 2.0;           // Сильное затухание (свет гаснет быстро)
-            light.distance = 35;         // Короткая дистанция (было 120)
+            light.distance = 5;         // Короткая дистанция (было 120)
 
             // Тени от фар
             light.castShadow = true;

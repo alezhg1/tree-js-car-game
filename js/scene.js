@@ -167,7 +167,7 @@ export function updateDayNightCycle(sunLight, ambientLight, hemiLight, scene, ti
 
     // ТУМАН: Ночью очень густой (видимость 20 единиц)
     const targetFogNear = isDay ? (isRaining ? 50 : 100) : 2;
-    const targetFogFar = isDay ? (isRaining ? 300 : 600) : 20;   // Резкий обрыв
+    const targetFogFar = isDay ? (isRaining ? 300 : 600) : 10;   // Резкий обрыв
 
     scene.fog.near += (targetFogNear - scene.fog.near) * 0.02;
     scene.fog.far += (targetFogFar - scene.fog.far) * 0.02;
