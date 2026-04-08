@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createScene, updateDayNightCycle, updateRain } from './scene.js';
+import { createScene, updateDayNightCycle, updateRain, initRainAudio } from './scene.js'; // Добавлен импорт initRainAudio
 import { loadTrack, alignCarToTrack, checkCollisions } from './track.js';
 import { loadCar } from './car.js';
 import { updateUI } from './ui.js';
@@ -24,6 +24,7 @@ let headlights = [];
 let isRaining = false;
 let isScoutMode = false;
 let isEditorMode = false;
+let isSoundEnabled = false; // Флаг включения звука
 
 let cameraAngleH = 0, cameraAngleV = 0.5;
 let scoutRotation = new THREE.Euler(0, 0, 0, 'YXZ');
@@ -35,6 +36,11 @@ const _v3CameraOffset = new THREE.Vector3();
 const _currentLookAt = new THREE.Vector3(0, 0.5, 0);
 
 const { scene, camera, renderer, sunLight, ambientLight, hemiLight } = createScene();
+
+// --- АУДИО СЛУШАТЕЛЬ ---
+const listener = new THREE.AudioListener();
+camera.add(listener); // Привязываем слушатель к камере
+
 const carContainer = new THREE.Group();
 scene.add(carContainer);
 
@@ -61,7 +67,7 @@ function checkLoading() {
         }
         scoutPosition.copy(camera.position);
         setupInputs();
-        console.log("✅ Игра готова! Нажми 9 для редактора.");
+        console.log("✅ Игра готова! Нажми 9 для редактора, 0 для дождя.");
     }
 }
 
@@ -73,6 +79,21 @@ loadCar(scene, carContainer, (carData) => {
 });
 
 function setupInputs() {
+    // Функция для включения звука при первом клике/нажатии
+    const enableSound = () => {
+        if (!isSoundEnabled) {
+            initRainAudio(listener);
+            isSoundEnabled = true;
+            console.log("🔊 Звук включен");
+            // Убираем слушатели после включения
+            window.removeEventListener('click', enableSound);
+            window.removeEventListener('keydown', enableSound);
+        }
+    };
+
+    window.addEventListener('click', enableSound);
+    window.addEventListener('keydown', enableSound);
+
     window.addEventListener('keydown', (e) => {
         const k = e.key.toLowerCase();
         if (k === '9') {
@@ -97,11 +118,16 @@ function setupInputs() {
                 document.body.requestPointerLock();
             } else {
                 document.exitPointerLock();
+                isScoutMode = false;
                 camera.lookAt(_currentLookAt);
             }
             return;
         }
-        if (k === '0') { isRaining = !isRaining; return; }
+        if (k === '0') {
+            isRaining = !isRaining;
+            console.log("🌧️ Дождь:", isRaining ? "ВКЛ" : "ВЫКЛ");
+            return;
+        }
 
         if (isScoutMode) {
             if (k==='w'||k==='ц') scoutKeys.w=true;
@@ -233,7 +259,6 @@ function updateCamera() {
     _currentLookAt.lerp(lookAt, CAMERA_CONFIG.lerpLookAt);
     camera.lookAt(_currentLookAt);
 
-    // Свет следует за машиной
     sunLight.position.copy(carContainer.position).add(new THREE.Vector3(40, 100, 40));
     sunLight.target = carContainer;
     sunLight.target.updateMatrixWorld();
@@ -267,11 +292,13 @@ function animate() {
 
     // 1. Цикл дня/ночи и дождь
     const isNight = updateDayNightCycle(sunLight, ambientLight, hemiLight, scene, elapsedTime, isRaining);
-    updateRain(camera);
+
+    // Обновляем дождь (физика + звук)
+    updateRain(camera, isRaining);
+
     updateClock(elapsedTime);
 
-    // 2. Фары (ЯРКИЕ, НО КОРОТКИЕ)
-    // Яркость 25 достаточно для короткой дистанции (35)
+    // 2. Фары
     const targetInt = isNight ? 25.0 : 0.0;
     headlights.forEach(l => l.intensity += (targetInt - l.intensity) * 0.05);
 
