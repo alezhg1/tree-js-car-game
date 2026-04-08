@@ -3,10 +3,103 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lamborghini - Modular</title>
-    <link rel="stylesheet" href="css/style.css">
-    <link rel="icon" href="data:;base64,=">
+    <title>Car Game Optimized</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
+        canvas { display: block; }
+        #loading {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: #0f0; font-size: 24px; font-family: monospace; pointer-events: none;
+            text-align: center; z-index: 9999;
+        }
+        
+        /* --- СТИЛИ СПИДОМЕТРА --- */
+        .dashboard {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 200px;
+            height: 100px;
+            background: rgba(0, 0, 0, 0.6);
+            border-radius: 100px 100px 0 0;
+            border: 2px solid #333;
+            border-bottom: none;
+            overflow: hidden;
+            z-index: 100;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .gauge-bg {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            width: 180px;
+            height: 180px;
+            margin-left: -90px;
+            border-radius: 50%;
+            border: 15px solid #333;
+            border-bottom-color: transparent;
+            border-left-color: transparent;
+            transform: rotate(135deg);
+            box-sizing: border-box;
+        }
+        
+        .gauge-fill {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            width: 180px;
+            height: 180px;
+            margin-left: -90px;
+            border-radius: 50%;
+            border: 15px solid #ff3333;
+            border-bottom-color: transparent;
+            border-left-color: transparent;
+            transform: rotate(135deg); /* Начальная позиция */
+            transition: transform 0.1s linear, border-color 0.3s, filter 0.3s;
+            box-sizing: border-box;
+            z-index: 2;
+        }
+        
+        .speed-text {
+            position: absolute;
+            bottom: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #fff;
+            font-size: 32px;
+            font-weight: bold;
+            z-index: 3;
+            text-shadow: 0 0 5px #000;
+        }
+        
+        .gear-box {
+            position: absolute;
+            bottom: 10px;
+            left: 20px;
+            color: #aaa;
+            font-size: 24px;
+            font-weight: bold;
+            z-index: 3;
+        }
 
+        /* Блок координат (отдельно) */
+        #coords {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            color: #0f0;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 14px;
+            z-index: 100;
+            pointer-events: none;
+        }
+    </style>
+
+    <!-- Import Map для Three.js -->
     <script type="importmap">
         {
             "imports": {
@@ -17,17 +110,22 @@
     </script>
 </head>
 <body>
-    <div id="loading">Загрузка...</div>
-    <div id="coords">X: 0.00 | Y: 0.00 | Z: 0.00</div>
-    <div id="speedometer-container">
-        <div class="ticks"></div>
+
+    <div id="loading">ЗАГРУЗКА МИРА...</div>
+
+    <!-- ИНТЕРФЕЙС (СПИДОМЕТР) -->
+    <div class="dashboard">
         <div class="gauge-bg"></div>
         <div class="gauge-fill" id="gauge-fill"></div>
-        <div class="gear-indicator" id="gear-display">N</div>
-        <div class="speed-value" id="speed-value">0</div>
-        <div class="speed-unit">км/ч</div>
+        <div class="speed-text"><span id="speed-value">0</span></div>
+        <div class="gear-box" id="gear-display">N</div>
     </div>
 
-    <script type="module" src="js/main.js"></script>
+    <!-- БЛОК КООРДИНАТ -->
+    <div id="coords">X: 0.00 | Y: 0.00 | Z: 0.00</div>
+
+    <!-- Подключение основного скрипта -->
+    <script type="module" src="./js/main.js"></script>
+
 </body>
 </html>
