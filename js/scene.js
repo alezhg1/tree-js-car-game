@@ -2,111 +2,179 @@ import * as THREE from 'three';
 import { TIME_CONFIG } from './config.js';
 
 let starField = null;
+let rainSystem = null;
+let rainVelocity = [];
 
 export function createScene() {
     const scene = new THREE.Scene();
 
-    // Начальный цвет (день)
+    // День: голубой фон
     scene.background = new THREE.Color(0x87CEEB);
-    scene.fog = new THREE.Fog(0x87CEEB, 50, 250);
+    scene.fog = new THREE.Fog(0x87CEEB, 100, 600);
 
-    const camera = new THREE.PerspectiveCamera(75, 5 / 4, 0.1, 300);
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 
     const renderer = new THREE.WebGLRenderer({
         antialias: false,
-        powerPreference: "high-performance",
-        preserveDrawingBuffer: false
+        powerPreference: "high-performance"
     });
-
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(1.0);
-    renderer.toneMapping = THREE.NoToneMapping;
-    renderer.shadowMap.enabled = false;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     document.body.appendChild(renderer.domElement);
 
-    // --- СВЕТ ---
-    // Солнечный свет (Directional)
-    const sunLight = new THREE.DirectionalLight(0xffffff, 1.5);
-    sunLight.position.set(50, 100, 50);
-    scene.add(sunLight);
-
-    // Фоновый свет (Ambient) - будет менять яркость
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
-    scene.add(ambientLight);
-
-    // --- ЗВЕЗДЫ (Простые точки) ---
-    const starGeo = new THREE.BufferGeometry();
-    const starCount = TIME_CONFIG?.starCount || 1000;
-    const posArray = new Float32Array(starCount * 3);
-
-    for(let i = 0; i < starCount * 3; i++) {
-        posArray[i] = (Math.random() - 0.5) * 400; // Разброс звезд
-    }
-
-    starGeo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
-    const starMat = new THREE.PointsMaterial({
+    // --- ЗВЕЗДЫ (Оптимизировано) ---
+    const starGeometry = new THREE.BufferGeometry();
+    const starMaterial = new THREE.PointsMaterial({
         color: 0xffffff,
-        size: 0.5,
+        size: 1.5,
         transparent: true,
-        opacity: 0, // Изначально скрыты (день)
-        fog: false
+        opacity: 0,
+        sizeAttenuation: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
     });
 
-    starField = new THREE.Points(starGeo, starMat);
-    starField.position.y = 50; // Чуть выше
+    const starVertices = [];
+    const count = 2000;
+    for (let i = 0; i < count; i++) {
+        const x = (Math.random() - 0.5) * 2000;
+        const y = Math.random() * 1000;
+        const z = (Math.random() - 0.5) * 2000;
+        if (y < 50) continue;
+        starVertices.push(x, y, z);
+    }
+
+    starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
+    starField = new THREE.Points(starGeometry, starMaterial);
     scene.add(starField);
 
-    return { scene, camera, renderer, sunLight, ambientLight };
+    // --- ДОЖДЬ ---
+    const rainCount = 15000;
+    const rainGeometry = new THREE.BufferGeometry();
+    const rainPositions = [];
+    rainVelocity = [];
+
+    for (let i = 0; i < rainCount; i++) {
+        rainPositions.push((Math.random() - 0.5) * 200, Math.random() * 100, (Math.random() - 0.5) * 200);
+        rainVelocity.push(0.5 + Math.random() * 0.5);
+    }
+
+    rainGeometry.setAttribute('position', new THREE.Float32BufferAttribute(rainPositions, 3));
+    const rainMaterial = new THREE.PointsMaterial({
+        color: 0xaaaaaa,
+        size: 0.2,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    });
+
+    rainSystem = new THREE.Points(rainGeometry, rainMaterial);
+    scene.add(rainSystem);
+
+    // --- СВЕТ ---
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+
+    const sunLight = new THREE.DirectionalLight(0xffffee, 1.8);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.width = 1024;
+    sunLight.shadow.mapSize.height = 1024;
+    sunLight.shadow.bias = -0.0005;
+    const shadowSize = 80;
+    sunLight.shadow.camera.left = -shadowSize;
+    sunLight.shadow.camera.right = shadowSize;
+    sunLight.shadow.camera.top = shadowSize;
+    sunLight.shadow.camera.bottom = -shadowSize;
+    sunLight.shadow.camera.near = 10;
+    sunLight.shadow.camera.far = 200;
+    scene.add(sunLight);
+
+    const hemiLight = new THREE.HemisphereLight(0x87CEEB, 0x333333, 0.4);
+    scene.add(hemiLight);
+
+    return { scene, camera, renderer, sunLight, ambientLight, hemiLight };
 }
 
-/**
- * Обновляет время суток.
- * @param {number} elapsedTime - Время в секундах
- * @param {THREE.DirectionalLight} sunLight
- * @param {THREE.AmbientLight} ambientLight
- * @param {THREE.Scene} scene
- * @returns {boolean} true если ночь
- */
-export function updateDayNightCycle(elapsedTime, sunLight, ambientLight, scene) {
-    const dayDuration = TIME_CONFIG?.dayDuration || 60;
-    const nightDuration = TIME_CONFIG?.nightDuration || 60;
-    const totalCycle = dayDuration + nightDuration;
+export function updateRain(camera) {
+    if (!rainSystem) return;
+    const positions = rainSystem.geometry.attributes.position.array;
+    for (let i = 0; i < positions.length; i += 3) {
+        positions[i + 1] -= rainVelocity[i / 3];
+        if (positions[i + 1] < 0) {
+            positions[i + 1] = 100;
+            positions[i] = (Math.random() - 0.5) * 200;
+            positions[i + 2] = (Math.random() - 0.5) * 200;
+        }
+    }
+    rainSystem.geometry.attributes.position.needsUpdate = true;
+    rainSystem.position.x = camera.position.x;
+    rainSystem.position.z = camera.position.z;
+}
 
-    // Текущее время в цикле
-    const time = elapsedTime % totalCycle;
-    const isNight = time > dayDuration;
+export function updateDayNightCycle(sunLight, ambientLight, hemiLight, scene, timeInSeconds, isRaining) {
+    const dayDur = TIME_CONFIG?.dayDuration || 180;
+    const nightDur = TIME_CONFIG?.nightDuration || 180;
+    const totalCycle = dayDur + nightDur;
+    const normalizedTime = (timeInSeconds % totalCycle) / totalCycle;
 
-    // Целевые значения
-    let targetSkyColor, targetFogColor, targetSunInt, targetAmbInt, targetStarOpacity;
+    const isDay = normalizedTime < 0.5;
 
-    if (isNight) {
-        // НОЧЬ
-        targetSkyColor = new THREE.Color(0x050510); // Темно-синий/черный
-        targetFogColor = new THREE.Color(0x050510);
-        targetSunInt = 0.2; // Тусклое "лунное" освещение
-        targetAmbInt = 0.1; // Темнота
-        targetStarOpacity = 1.0;
-    } else {
+    let sunIntensity, ambientIntensity, skyColor, fogColor, starOpacity, rainOpacity;
+
+    if (isDay) {
         // ДЕНЬ
-        targetSkyColor = new THREE.Color(0x87CEEB); // Голубой
-        targetFogColor = new THREE.Color(0x87CEEB);
-        targetSunInt = 1.5; // Яркое солнце
-        targetAmbInt = 0.8; // Яркий фон
-        targetStarOpacity = 0.0;
+        sunIntensity = isRaining ? 0.8 : 1.8;
+        ambientIntensity = isRaining ? 0.4 : 0.6;
+        skyColor = isRaining ? new THREE.Color(0x555566) : new THREE.Color(0x87CEEB);
+        fogColor = skyColor;
+        starOpacity = 0;
+
+        hemiLight.color.setHex(isRaining ? 0x555566 : 0x87CEEB);
+        hemiLight.groundColor.setHex(0x333333);
+        sunLight.color.setHex(0xffffee);
+    } else {
+        // НОЧЬ: АБСОЛЮТНАЯ ТЬМА (Как ты просил)
+        sunIntensity = 0.0;      // Луны нет
+        ambientIntensity = 0.0;  // Ноль общего света! Трасса не освещается сама по себе.
+
+        // Черный как смоль
+        skyColor = new THREE.Color(0x000000);
+        fogColor = new THREE.Color(0x000000);
+
+        starOpacity = isRaining ? 0.0 : 0.8;
+
+        hemiLight.color.setHex(0x000000);
+        hemiLight.groundColor.setHex(0x000000);
+        sunLight.color.setHex(0x000000);
     }
 
-    // Плавная интерполяция (Lerp) цветов и значений
-    scene.background.lerp(targetSkyColor, 0.02);
-    scene.fog.color.lerp(targetFogColor, 0.02);
+    rainOpacity = isRaining ? 0.8 : 0.0;
 
-    sunLight.intensity += (targetSunInt - sunLight.intensity) * 0.02;
-    ambientLight.intensity += (targetAmbInt - ambientLight.intensity) * 0.02;
+    // Плавная интерполяция
+    sunLight.intensity += (sunIntensity - sunLight.intensity) * 0.02;
+    ambientLight.intensity += (ambientIntensity - ambientLight.intensity) * 0.02;
 
-    if (starField) {
-        starField.material.opacity += (targetStarOpacity - starField.material.opacity) * 0.02;
-    }
+    scene.background.lerp(skyColor, 0.02);
+    scene.fog.color.lerp(fogColor, 0.02);
 
-    return isNight;
+    // ТУМАН: Ночью он становится ОЧЕНЬ густым (видимость всего 25 единиц)
+    // Это создаст эффект "фонаря в подвале"
+    const targetFogNear = isDay ? (isRaining ? 50 : 100) : 2;
+    const targetFogFar = isDay ? (isRaining ? 300 : 600) : 25;   // Резкий обрыв света
+
+    scene.fog.near += (targetFogNear - scene.fog.near) * 0.02;
+    scene.fog.far += (targetFogFar - scene.fog.far) * 0.02;
+
+    if (starField) starField.material.opacity += (starOpacity - starField.material.opacity) * 0.02;
+    if (rainSystem) rainSystem.material.opacity += (rainOpacity - rainSystem.material.opacity) * 0.05;
+
+    return !isDay;
 }

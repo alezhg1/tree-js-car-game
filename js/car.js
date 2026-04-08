@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+// Убрали TIME_CONFIG, чтобы не зависеть от него, зададим дальность явно
 
 export function loadCar(scene, carContainer, onLoaded) {
     const loader = new GLTFLoader();
@@ -13,8 +14,7 @@ export function loadCar(scene, carContainer, onLoaded) {
 
         const carData = {
             centerHeight: height / 2,
-            totalHeight: height,
-            headlights: [] // Сюда запишем фары
+            totalHeight: height
         };
 
         model.position.x -= center.x;
@@ -23,35 +23,43 @@ export function loadCar(scene, carContainer, onLoaded) {
 
         model.traverse((child) => {
             if (child.isMesh) {
-                child.castShadow = false;
-                child.receiveShadow = false;
+                child.castShadow = true;
+                child.receiveShadow = true;
             }
         });
 
-        // --- СОЗДАНИЕ ФАР ---
-        // Левая фара
-        const leftLight = new THREE.SpotLight(0xffffee, 0); // Яркость 0 изначально
-        leftLight.angle = Math.PI / 6;
-        leftLight.penumbra = 0.5;
-        leftLight.decay = 2;
-        leftLight.distance = 60; // Дальность света
-        leftLight.position.set(-0.3, 0.5, 0.8); // Позиция относительно центра машины
-        leftLight.target.position.set(-0.3, 0, 10); // Цель света
+        // --- ФАРЫ (Копия твоего кода с усилением) ---
+        const createHeadlight = (xPos) => {
+            const light = new THREE.SpotLight(0xffffff, 0);
 
-        // Правая фара
-        const rightLight = leftLight.clone();
-        rightLight.position.set(0.3, 0.5, 0.8);
-        rightLight.target.position.set(0.3, 0, 10);
+            // Настройки из твоего файла (широкий луч, мягкие края)
+            light.angle = Math.PI / 4;   // 45 градусов - широкий конус
+            light.penumbra = 0.5;        // Мягкие края
+            light.decay = 1.5;           // Реалистичное затухание
+            light.distance = 120;        // Дальность
 
-        // Добавляем фары и их цели в контейнер машины
-        carContainer.add(leftLight);
-        carContainer.add(leftLight.target);
-        carContainer.add(rightLight);
-        carContainer.add(rightLight.target);
+            // Тени от фар (обязательно для атмосферы)
+            light.castShadow = true;
+            light.shadow.mapSize.width = 512;
+            light.shadow.mapSize.height = 512;
+            light.shadow.bias = -0.0001;
 
-        // Сохраняем ссылки для main.js
-        carData.headlights = [leftLight, rightLight];
-        // --------------------------
+            // Позиция: чуть ближе к машине, чтобы свет начинался сразу перед капотом
+            light.position.set(xPos, 0.6, 0.8);
+            light.target.position.set(xPos, 0, 30);
+
+            return { light, target: light.target };
+        };
+
+        const leftSystem = createHeadlight(-0.4);
+        const rightSystem = createHeadlight(0.4);
+
+        carContainer.add(leftSystem.light);
+        carContainer.add(leftSystem.target);
+        carContainer.add(rightSystem.light);
+        carContainer.add(rightSystem.target);
+
+        carData.headlights = [leftSystem.light, rightSystem.light];
 
         carContainer.add(model);
         onLoaded(carData);

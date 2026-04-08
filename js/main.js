@@ -1,16 +1,13 @@
 import * as THREE from 'three';
-import { createScene, updateDayNightCycle } from './scene.js';
+import { createScene, updateDayNightCycle, updateRain } from './scene.js';
 import { loadTrack, alignCarToTrack, checkCollisions } from './track.js';
 import { loadCar } from './car.js';
 import { updateUI } from './ui.js';
+import { LevelEditor } from './editor.js';
 import { TELEPORT_TO_TENT, TARGET_POS, CAR_CONFIG, CAMERA_CONFIG, TIME_CONFIG } from './config.js';
 import Stats from 'three/addons/libs/stats.module.js';
-// ИМПОРТ РЕДАКТОРА
-import { LevelEditor } from './editor.js';
 
-console.error("%c!!! ГЛАВНЫЙ ФАЙЛ ЗАПУЩЕН !!!", "background: red; color: white; font-size: 20px;");
-
-// ... (переменные stats, clockDiv, speed, trackModel и т.д. остаются как были) ...
+// --- UI & STATS ---
 const stats = new Stats();
 stats.showPanel(0);
 document.body.appendChild(stats.dom);
@@ -24,7 +21,9 @@ document.body.appendChild(clockDiv);
 let speed = 0, trackModel = null, carCenterHeight = 0, assetsLoaded = 0;
 const totalAssets = 2;
 let headlights = [];
-let isRaining = false, isScoutMode = false, isEditorMode = false;
+let isRaining = false;
+let isScoutMode = false;
+let isEditorMode = false;
 
 let cameraAngleH = 0, cameraAngleV = 0.5;
 let scoutRotation = new THREE.Euler(0, 0, 0, 'YXZ');
@@ -35,19 +34,16 @@ const keys = { w:false, a:false, s:false, d:false, ArrowLeft:false, ArrowRight:f
 const _v3CameraOffset = new THREE.Vector3();
 const _currentLookAt = new THREE.Vector3(0, 0.5, 0);
 
-const { scene, camera, renderer, sunLight, ambientLight } = createScene();
+const { scene, camera, renderer, sunLight, ambientLight, hemiLight } = createScene();
 const carContainer = new THREE.Group();
 scene.add(carContainer);
 
-// СОЗДАНИЕ РЕДАКТОРА
 let editor;
 
 function checkLoading() {
     assetsLoaded++;
     if (assetsLoaded === totalAssets) {
         document.getElementById('loading').style.display = 'none';
-
-        // Инициализируем редактор только после загрузки сцены
         editor = new LevelEditor(scene, camera);
 
         fetch('./level_data.json')
@@ -65,7 +61,7 @@ function checkLoading() {
         }
         scoutPosition.copy(camera.position);
         setupInputs();
-        console.log("✅ ГОТОВО! Нажми 9 для редактора.");
+        console.log("✅ Игра готова! Нажми 9 для редактора.");
     }
 }
 
@@ -80,7 +76,6 @@ function setupInputs() {
     window.addEventListener('keydown', (e) => {
         const k = e.key.toLowerCase();
         if (k === '9') {
-            console.error("%c[INPUT] 9 НАЖАТА!", "background: yellow; color: black; font-size: 16px;");
             isEditorMode = editor.toggle();
             if (isEditorMode) {
                 isScoutMode = true;
@@ -94,7 +89,6 @@ function setupInputs() {
             }
             return;
         }
-        // ... (остальные обработчики клавиш как были: P, 0, движение) ...
         if ((k === 'p' || k === 'з') && !isEditorMode) {
             isScoutMode = !isScoutMode;
             if (isScoutMode) {
@@ -173,7 +167,6 @@ function setupInputs() {
     });
 }
 
-// ... (функции updateCarPhysics, updateScout, updateCamera, updateClock остаются без изменений) ...
 function updateCarPhysics() {
     if (isScoutMode) return;
     let acc = 0;
@@ -189,16 +182,19 @@ function updateCarPhysics() {
     if (speed > CAR_CONFIG.maxSpeed) speed = CAR_CONFIG.maxSpeed;
     if (speed < -CAR_CONFIG.reverseSpeed) speed = -CAR_CONFIG.reverseSpeed;
     if (Math.abs(speed) < 0.0001) speed = 0;
+
     if (Math.abs(speed) > 0.0001) {
         const dir = speed >= 0 ? 1 : -1;
         if (keys.a) carContainer.rotation.y += CAR_CONFIG.turnSpeed * dir;
         if (keys.d) carContainer.rotation.y -= CAR_CONFIG.turnSpeed * dir;
     }
+
     let collision = false;
     if (Math.abs(speed) > 0.001) collision = checkCollisions(carContainer, trackModel, carCenterHeight);
     if (collision) { speed = 0; carContainer.translateZ(-0.05); return; }
     carContainer.translateZ(speed);
 }
+
 function updateScout() {
     if (!isScoutMode) return;
     const spd = 0.1;
@@ -212,6 +208,7 @@ function updateScout() {
     if (scoutKeys.ArrowDown) scoutPosition.y -= spd;
     camera.position.copy(scoutPosition);
 }
+
 function updateCamera() {
     if (isScoutMode) return;
     const rotSpd = 0.04;
@@ -219,28 +216,38 @@ function updateCamera() {
     if (keys.ArrowRight) cameraAngleH -= rotSpd;
     if (keys.ArrowUp) cameraAngleV = Math.min(cameraAngleV + rotSpd, 1.2);
     if (keys.ArrowDown) cameraAngleV = Math.max(cameraAngleV - rotSpd, 0.1);
+
     const dist = CAMERA_CONFIG.distance;
     const hOff = Math.sin(cameraAngleV) * dist;
     const hDist = Math.cos(cameraAngleV) * dist;
     const totalAngle = carContainer.rotation.y + cameraAngleH;
+
     const offX = Math.sin(totalAngle) * hDist;
     const offZ = Math.cos(totalAngle) * hDist;
     const offY = hOff + CAMERA_CONFIG.height;
+
     _v3CameraOffset.set(carContainer.position.x - offX, carContainer.position.y + offY, carContainer.position.z - offZ);
     camera.position.lerp(_v3CameraOffset, CAMERA_CONFIG.lerpPosition);
+
     const lookAt = new THREE.Vector3(0, 0.5, 30).applyMatrix4(carContainer.matrixWorld);
     _currentLookAt.lerp(lookAt, CAMERA_CONFIG.lerpLookAt);
     camera.lookAt(_currentLookAt);
+
+    // Свет следует за машиной
+    sunLight.position.copy(carContainer.position).add(new THREE.Vector3(40, 100, 40));
+    sunLight.target = carContainer;
+    sunLight.target.updateMatrixWorld();
 }
+
 function updateClock(elapsedTime) {
-    const total = TIME_CONFIG.dayDuration + TIME_CONFIG.nightDuration;
+    const total = (TIME_CONFIG?.dayDuration || 180) + (TIME_CONFIG?.nightDuration || 180);
     const t = (elapsedTime % total) / total * 6;
     const h = Math.floor(t);
     const m = Math.floor((t - h) * 60);
     clockDiv.innerText = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`;
 }
 
-// ЦИКЛ АНИМАЦИИ
+// --- ANIMATION LOOP ---
 let elapsedTime = 0;
 const clock = new THREE.Clock();
 const targetFPS = 60;
@@ -258,12 +265,17 @@ function animate() {
     const delta = clock.getDelta();
     elapsedTime += delta;
 
-    const isNight = updateDayNightCycle(elapsedTime, sunLight, ambientLight, scene);
+    // 1. Цикл дня/ночи и дождь
+    const isNight = updateDayNightCycle(sunLight, ambientLight, hemiLight, scene, elapsedTime, isRaining);
+    updateRain(camera);
     updateClock(elapsedTime);
 
-    const targetInt = isNight ? 25.0 : 0.0;
+    // 2. Фары (ЯРКИЕ ПРОЖЕКТОРЫ)
+    // Было 20, стало 35. В полной темноте это даст мощный след света.
+    const targetInt = isNight ? 35.0 : 0.0;
     headlights.forEach(l => l.intensity += (targetInt - l.intensity) * 0.05);
 
+    // 3. Логика режимов
     if (isScoutMode) {
         updateScout();
     } else {
@@ -273,12 +285,11 @@ function animate() {
         updateUI(carContainer, speed);
     }
 
+    // 4. Редактор
     if (isEditorMode) {
         editor.moveObject(keys);
-        editor.updateAnimations(delta); // Обновляем анимацию выбранного объекта в редакторе
+        editor.updateAnimations(delta);
     }
-
-    // Глобальное обновление анимаций для всех объектов (чтобы работали и в игре)
     if (editor && editor.objects) {
         editor.objects.forEach(obj => {
             if (obj.userData.mixer) obj.userData.mixer.update(delta);
@@ -289,5 +300,5 @@ function animate() {
     stats.end();
 }
 
-console.log("🔄 Запуск animate()...");
+console.log("🔄 Запуск...");
 animate();
