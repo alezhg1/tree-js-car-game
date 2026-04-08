@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-// Убрали TIME_CONFIG, чтобы не зависеть от него, зададим дальность явно
 
 export function loadCar(scene, carContainer, onLoaded) {
     const loader = new GLTFLoader();
@@ -28,31 +27,33 @@ export function loadCar(scene, carContainer, onLoaded) {
             }
         });
 
-        // --- ФАРЫ (Копия твоего кода с усилением) ---
+        // --- ФАРЫ (Настроены вниз и коротко) ---
         const createHeadlight = (xPos) => {
             const light = new THREE.SpotLight(0xffffff, 0);
 
-            // Настройки из твоего файла (широкий луч, мягкие края)
-            light.angle = Math.PI / 4;   // 45 градусов - широкий конус
-            light.penumbra = 0.5;        // Мягкие края
-            light.decay = 1.5;           // Реалистичное затухание
-            light.distance = 120;        // Дальность
+            // Узкий и короткий луч, бьющий в землю
+            light.angle = Math.PI / 5;   // Чуть уже (~36 градусов), чтобы было пятно, а не веер
+            light.penumbra = 0.8;        // Очень мягкие края для реализма
+            light.decay = 2.0;           // Сильное затухание (свет гаснет быстро)
+            light.distance = 35;         // Короткая дистанция (было 120)
 
-            // Тени от фар (обязательно для атмосферы)
+            // Тени от фар
             light.castShadow = true;
             light.shadow.mapSize.width = 512;
             light.shadow.mapSize.height = 512;
             light.shadow.bias = -0.0001;
 
-            // Позиция: чуть ближе к машине, чтобы свет начинался сразу перед капотом
-            light.position.set(xPos, 0.6, 0.8);
-            light.target.position.set(xPos, 0, 30);
+            // ПОЗИЦИЯ: Ниже (0.4) и ближе к бамперу (0.7)
+            light.position.set(xPos, 0.4, 0.7);
+
+            // ЦЕЛЬ: Направлена ВНИЗ перед машиной (Y = -0.8), чтобы светить на асфальт
+            light.target.position.set(xPos, -0.8, 15);
 
             return { light, target: light.target };
         };
 
-        const leftSystem = createHeadlight(-0.4);
-        const rightSystem = createHeadlight(0.4);
+        const leftSystem = createHeadlight(-0.35);
+        const rightSystem = createHeadlight(0.35);
 
         carContainer.add(leftSystem.light);
         carContainer.add(leftSystem.target);

@@ -270,9 +270,9 @@ function animate() {
     updateRain(camera);
     updateClock(elapsedTime);
 
-    // 2. Фары (ЯРКИЕ ПРОЖЕКТОРЫ)
-    // Было 20, стало 35. В полной темноте это даст мощный след света.
-    const targetInt = isNight ? 35.0 : 0.0;
+    // 2. Фары (ЯРКИЕ, НО КОРОТКИЕ)
+    // Яркость 25 достаточно для короткой дистанции (35)
+    const targetInt = isNight ? 25.0 : 0.0;
     headlights.forEach(l => l.intensity += (targetInt - l.intensity) * 0.05);
 
     // 3. Логика режимов

@@ -23,7 +23,7 @@ export const CAMERA_CONFIG = {
 
 // НАСТРОЙКИ ВРЕМЕНИ СУТОК И НЕБА
 export const TIME_CONFIG = {
-    dayDuration: 180,       // 3 минуты дня
+    dayDuration: 10,       // 3 минуты дня
     nightDuration: 180,     // 3 минуты ночи
     headlightIntensity: 8,
     headlightDistance: 100,

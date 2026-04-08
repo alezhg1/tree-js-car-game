@@ -141,9 +141,9 @@ export function updateDayNightCycle(sunLight, ambientLight, hemiLight, scene, ti
         hemiLight.groundColor.setHex(0x333333);
         sunLight.color.setHex(0xffffee);
     } else {
-        // НОЧЬ: АБСОЛЮТНАЯ ТЬМА (Как ты просил)
+        // НОЧЬ: ПОЛНАЯ ТЬМА (Без общего света!)
         sunIntensity = 0.0;      // Луны нет
-        ambientIntensity = 0.0;  // Ноль общего света! Трасса не освещается сама по себе.
+        ambientIntensity = 0.0;  // АБСОЛЮТНЫЙ НОЛЬ. Трасса не видна без фар.
 
         // Черный как смоль
         skyColor = new THREE.Color(0x000000);
@@ -165,10 +165,9 @@ export function updateDayNightCycle(sunLight, ambientLight, hemiLight, scene, ti
     scene.background.lerp(skyColor, 0.02);
     scene.fog.color.lerp(fogColor, 0.02);
 
-    // ТУМАН: Ночью он становится ОЧЕНЬ густым (видимость всего 25 единиц)
-    // Это создаст эффект "фонаря в подвале"
+    // ТУМАН: Ночью очень густой (видимость 20 единиц)
     const targetFogNear = isDay ? (isRaining ? 50 : 100) : 2;
-    const targetFogFar = isDay ? (isRaining ? 300 : 600) : 25;   // Резкий обрыв света
+    const targetFogFar = isDay ? (isRaining ? 300 : 600) : 20;   // Резкий обрыв
 
     scene.fog.near += (targetFogNear - scene.fog.near) * 0.02;
     scene.fog.far += (targetFogFar - scene.fog.far) * 0.02;
